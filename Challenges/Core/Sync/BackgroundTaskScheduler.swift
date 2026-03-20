@@ -1,0 +1,35 @@
+import Foundation
+import BackgroundTasks
+
+/// Registers and schedules BGAppRefreshTask for periodic sync during active challenges.
+enum BackgroundTaskScheduler {
+
+    static let syncTaskID = "com.challenges.sync"
+
+    static func registerTasks() {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: syncTaskID, using: nil) { task in
+            handleAppRefresh(task: task as! BGAppRefreshTask)
+        }
+    }
+
+    static func scheduleAppRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: syncTaskID)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)  // 15 minutes minimum
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    private static func handleAppRefresh(task: BGAppRefreshTask) {
+        // Schedule the next refresh before doing any work.
+        scheduleAppRefresh()
+
+        let syncTask = Task {
+            await SyncCoordinator.shared.syncCurrentChallenges()
+            task.setTaskCompleted(success: true)
+        }
+
+        task.expirationHandler = {
+            syncTask.cancel()
+            task.setTaskCompleted(success: false)
+        }
+    }
+}

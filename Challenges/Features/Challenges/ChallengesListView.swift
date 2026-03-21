@@ -7,9 +7,12 @@ struct ChallengesListView: View {
     @State private var vm = ChallengesListViewModel()
     @State private var showNewChallenge = false
     @State private var showJoinChallenge = false
+    /// Programmatic navigation path — enables intents, Siri, and Spotlight to deep-link
+    /// into a challenge detail view without the user tapping.
+    @State private var navigationPath = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
 
@@ -67,6 +70,16 @@ struct ChallengesListView: View {
                 guard let userID = session.userID else { return }
                 await vm.load(userID: userID)
             }
+        }
+        // Deep-link from intents, Siri, and Spotlight tap-throughs.
+        .onReceive(NotificationCenter.default.publisher(for: .openChallenge)) { note in
+            guard let id = note.userInfo?["challengeID"] as? String,
+                  let challenge = vm.challenges.first(where: { $0.id == id }) else { return }
+            navigationPath.append(challenge)
+        }
+        // CreateChallengeIntent: open the New Challenge sheet directly.
+        .onReceive(NotificationCenter.default.publisher(for: .openNewChallenge)) { _ in
+            showNewChallenge = true
         }
     }
 

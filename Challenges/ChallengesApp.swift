@@ -1,5 +1,6 @@
 import SwiftUI
 import BackgroundTasks
+import CoreSpotlight
 
 // MARK: - App Entry Point
 
@@ -58,6 +59,18 @@ struct MainTabView: View {
         }
         // Tint the selected tab item with the exercise ring green, matching Apple Fitness.
         .tint(.exerciseRing)
+        // Handle challenges://challenge/<id> deep links from the widget and share sheets.
+        .onOpenURL { url in
+            guard url.scheme == "challenges",
+                  url.host == "challenge",
+                  let challengeID = url.pathComponents.dropFirst().first
+            else { return }
+            NotificationCenter.default.post(
+                name: .openChallenge,
+                object: nil,
+                userInfo: ["challengeID": challengeID]
+            )
+        }
         .task {
             await SyncCoordinator.shared.syncCurrentChallenges()
             BackgroundTaskScheduler.scheduleAppRefresh()
@@ -189,5 +202,38 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             let result = await SubscriptionHandler.handle(userInfo: userInfo)
             completionHandler(result)
         }
+    }
+
+    /// Handles NSUserActivity continuations from:
+    /// - Siri / Apple Intelligence intent invocations (ShowChallengeIntent)
+    /// - NSUserActivity donations made in ChallengeDetailView
+    /// - Core Spotlight tap-throughs (CSSearchableItemActionType)
+    /// - Handoff from other devices
+    ///
+    /// All paths resolve to the same `openChallenge` notification, which
+    /// ChallengesListView observes to navigate programmatically.
+    func application(
+        _ application: UIApplication,
+        continue userActivity: NSUserActivity,
+        restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+    ) -> Bool {
+        let challengeID: String?
+
+        if userActivity.activityType == CSSearchableItemActionType {
+            // Spotlight tap: the identifier is the challenge's CloudKit record name.
+            challengeID = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+        } else {
+            // NSUserActivity (Siri suggestion, Handoff, or custom activity).
+            challengeID = userActivity.userInfo?["challengeID"] as? String
+        }
+
+        guard let id = challengeID else { return false }
+
+        NotificationCenter.default.post(
+            name: .openChallenge,
+            object: nil,
+            userInfo: ["challengeID": id]
+        )
+        return true
     }
 }

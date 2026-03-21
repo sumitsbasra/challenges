@@ -31,6 +31,9 @@ actor SyncCoordinator {
             for challenge in active {
                 await syncChallenge(challenge, userID: userID)
             }
+
+            // Update the widget with the user's current rank in their most active challenge.
+            await updateWidgetState(userID: userID, activeChallenges: active)
         } catch {
             print("[SyncCoordinator] Failed to fetch challenges: \(error)")
         }
@@ -124,6 +127,46 @@ actor SyncCoordinator {
             try await ck.saveDailyScores(scores)
         } catch {
             print("[SyncCoordinator] Failed to save scores for challenge \(challenge.id): \(error)")
+        }
+    }
+
+    // MARK: - Widget state
+
+    /// Computes the user's rank in their first active challenge and writes a
+    /// WidgetState snapshot to the shared App Group UserDefaults.
+    /// The widget reads this data without needing direct CloudKit access.
+    private func updateWidgetState(userID: String, activeChallenges: [Challenge]) async {
+        guard let challenge = activeChallenges.first else { return }
+
+        do {
+            var participations = try await ck.fetchParticipations(challengeID: challenge.id)
+            let scores = try await ck.fetchDailyScores(challengeID: challenge.id)
+
+            for i in participations.indices {
+                participations[i].dailyScores = scores.filter {
+                    $0.participationID == participations[i].id
+                }
+            }
+
+            let ranked = ScoreAggregator.ranked(participations)
+            guard let mine = ranked.first(where: { $0.user.id == userID }) else { return }
+
+            let daysRemaining = max(0, Calendar.current.dateComponents(
+                [.day], from: Date(), to: challenge.endDate
+            ).day ?? 0)
+
+            let state = WidgetState(
+                challengeTitle: challenge.title,
+                challengeID: challenge.id,
+                rank: mine.rank,
+                totalPoints: mine.totalPoints,
+                daysRemaining: daysRemaining,
+                participantCount: ranked.count,
+                updatedAt: Date()
+            )
+            WidgetDataWriter.write(state: state)
+        } catch {
+            print("[SyncCoordinator] Widget state update failed: \(error)")
         }
     }
 

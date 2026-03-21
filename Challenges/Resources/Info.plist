@@ -57,5 +57,26 @@
 	<array>
 		<string>iCloud.com.yourname.challenges</string>
 	</array>
+
+	<!-- NSUserActivity types for Siri suggestions, Handoff, and proactive predictions -->
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.challenges.viewChallenge</string>
+		<string>com.challenges.checkRank</string>
+	</array>
+
+	<!-- URL scheme for widget deep links (challenges://challenge/<id>)
+	     and existing invite links (challenges://join/<code>) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>challenges</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>com.yourname.challenges</string>
+		</dict>
+	</array>
 </dict>
 </plist>

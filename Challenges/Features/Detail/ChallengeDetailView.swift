@@ -53,6 +53,27 @@ struct ChallengeDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .dailyScoreDidUpdate)) { _ in
             Task { await vm.handleScoreUpdate() }
         }
+        // MARK: - NSUserActivity Donations
+        // Donates a "viewing this challenge" activity so Siri learns the user's
+        // time patterns and can proactively suggest "Check [challenge]" at the right moment.
+        .userActivity("com.challenges.viewChallenge", isActive: true) { activity in
+            activity.title = challenge.title
+            activity.isEligibleForSearch = true
+            activity.isEligibleForPrediction = true
+            activity.requiredUserInfoKeys = ["challengeID"]
+            activity.userInfo = ["challengeID": challenge.id]
+            activity.suggestedInvocationPhrase = "Check \(challenge.title)"
+        }
+        // Donates a rank-check prediction whenever the user's rank becomes visible,
+        // so Siri can suggest "My rank in [challenge]" at post-workout times.
+        .onChange(of: vm.rankedParticipations.first(where: { $0.user.id == session.userID })?.rank) { _, rank in
+            guard let rank else { return }
+            let activity = NSUserActivity(activityType: "com.challenges.checkRank")
+            activity.isEligibleForPrediction = true
+            activity.userInfo = ["challengeID": challenge.id, "rank": rank]
+            activity.suggestedInvocationPhrase = "My rank in \(challenge.title)"
+            activity.becomeCurrent()
+        }
     }
 
     // MARK: - Status Banner

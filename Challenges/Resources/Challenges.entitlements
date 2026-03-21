@@ -31,5 +31,11 @@
 	<array>
 		<string>Default</string>
 	</array>
+
+	<!-- App Group shared with ChallengesWidget for WidgetState data exchange -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.yourname.challenges</string>
+	</array>
 </dict>
 </plist>

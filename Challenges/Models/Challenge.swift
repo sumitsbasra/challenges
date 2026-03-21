@@ -1,0 +1,27 @@
+import Foundation
+
+enum ChallengeStatus: String, Codable, CaseIterable {
+    case pending, active, completed
+}
+
+struct Challenge: Identifiable, Codable {
+    let id: String
+    var title: String
+    var creatorID: String
+    var startDate: Date
+    var endDate: Date           // always startDate + 6 days (7-day competition)
+    var status: ChallengeStatus
+    var inviteCode: String      // 6-char alphanumeric, e.g. "FX4K9R"
+    var maxParticipants: Int    // 2–20
+    var createdAt: Date
+
+    /// Duration is always exactly 7 days.
+    static let durationDays = 7
+
+    var isOwned: Bool = false   // transient, set by the app after fetch
+    var participants: [Participation] = []  // transient, populated after fetch
+
+    static func makeEndDate(from startDate: Date) -> Date {
+        Calendar.current.date(byAdding: .day, value: durationDays - 1, to: startDate)!
+    }
+}

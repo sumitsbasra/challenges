@@ -71,6 +71,21 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
 
     // MARK: - Handle successful credential
 
+    /// Called by OnboardingView after a successful SignInWithAppleButton completion.
+    /// Updates the `UserSession` so the root view transitions to the authenticated state.
+    func handleSignInCompletion(credential: ASAuthorizationAppleIDCredential,
+                                session: UserSession) async {
+        await handleSignIn(credential: credential)
+        // Sync the newly created user into the session so ContentView transitions.
+        if let ckName = currentUserID {
+            let name = UserDefaults.standard.string(forKey: "displayName") ?? "Challenger"
+            let hasWatch = UserDefaults.standard.bool(forKey: "hasAppleWatch")
+            let user = AppUser(id: ckName, displayName: name,
+                               appleUserID: credential.user, hasAppleWatch: hasWatch)
+            await MainActor.run { session.update(user: user) }
+        }
+    }
+
     private func handleSignIn(credential: ASAuthorizationAppleIDCredential) async {
         let appleUserID = credential.user
         keychainSave(key: Self.appleUserIDKeychainKey, value: appleUserID)

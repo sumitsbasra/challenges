@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - View Model
+
 @Observable
 final class JoinChallengeViewModel {
 
@@ -7,15 +9,16 @@ final class JoinChallengeViewModel {
         didSet {
             let upper = code.uppercased().filter { $0.isLetter || $0.isNumber }
             if upper != code { code = upper }
+            if code.count > 6 { code = String(code.prefix(6)) }
             if code.count == 6 { Task { await lookupChallenge() } }
             if code.count < 6 { previewChallenge = nil; error = nil }
         }
     }
     var previewChallenge: Challenge? = nil
-    var isLooking: Bool = false
-    var isJoining: Bool = false
+    var isLooking = false
+    var isJoining = false
     var error: String? = nil
-    var joined: Bool = false
+    var joined = false
 
     private let ck = CloudKitManager.shared
 
@@ -25,11 +28,10 @@ final class JoinChallengeViewModel {
         isLooking = true
         error = nil
         defer { isLooking = false }
-
         do {
             previewChallenge = try await ck.fetchChallenge(inviteCode: code)
-        } catch let ckError as CloudKitError {
-            error = ckError.localizedDescription
+        } catch let e as CloudKitError {
+            error = e.localizedDescription
         } catch {
             self.error = error.localizedDescription
         }
@@ -50,7 +52,6 @@ final class JoinChallengeViewModel {
             status: .active,
             hasAppleWatch: hasWatch
         )
-
         do {
             try await ck.saveParticipation(participation)
             joined = true
@@ -60,6 +61,8 @@ final class JoinChallengeViewModel {
     }
 }
 
+// MARK: - View
+
 struct JoinChallengeView: View {
     @Environment(UserSession.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -67,92 +70,127 @@ struct JoinChallengeView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Text("Enter Invite Code")
-                    .font(.title2.bold())
-                    .padding(.top, 32)
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                // 6-character code entry
-                TextField("FX4K9R", text: Bindable(vm).code)
-                    .font(.system(size: 32, weight: .bold, design: .monospaced))
-                    .multilineTextAlignment(.center)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .onChange(of: vm.code) { _, new in
-                        if new.count > 6 { vm.code = String(new.prefix(6)) }
-                    }
-                    .padding()
-                    .background(Color.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 40)
-
-                if vm.isLooking {
-                    ProgressView("Finding challenge…")
-                } else if let challenge = vm.previewChallenge {
-                    ChallengePreviewCard(challenge: challenge)
-                        .padding(.horizontal)
-
-                    if let error = vm.error {
-                        Text(error).foregroundStyle(.red).font(.caption)
-                    }
-
-                    Button {
-                        Task {
-                            guard let userID = session.userID else { return }
-                            let hasWatch = session.currentUser?.hasAppleWatch ?? false
-                            await vm.joinChallenge(userID: userID, hasWatch: hasWatch)
-                            if vm.joined { dismiss() }
+                VStack(spacing: 0) {
+                    // Header
+                    VStack(spacing: 8) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.standRing.opacity(0.12))
+                                .frame(width: 72, height: 72)
+                            Image(systemName: "qrcode.viewfinder")
+                                .font(.system(size: 32))
+                                .foregroundStyle(.standRing)
                         }
-                    } label: {
-                        Group {
-                            if vm.isJoining { ProgressView() }
-                            else { Text("Join Challenge") }
-                        }
-                        .frame(maxWidth: .infinity)
+                        .padding(.top, 32)
+
+                        Text("Enter a Code")
+                            .font(.title2.bold())
+                        Text("Ask the challenge creator for their 6-character invite code.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .padding(.horizontal)
-                } else if let error = vm.error {
-                    Text(error).foregroundStyle(.red).font(.subheadline)
+                    .padding(.bottom, 32)
+
+                    // Code input
+                    FitnessFormCard {
+                        TextField("FX4K9R", text: Bindable(vm).code)
+                            .font(.system(size: 34, weight: .bold, design: .monospaced))
+                            .multilineTextAlignment(.center)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .foregroundStyle(.standRing)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .padding(.horizontal, 16)
+
+                    // State: looking / preview / error
+                    Group {
+                        if vm.isLooking {
+                            ProgressView("Finding challenge…")
+                                .tint(.standRing)
+                                .padding(.top, 28)
+                        } else if let challenge = vm.previewChallenge {
+                            challengePreview(challenge)
+                        } else if let error = vm.error {
+                            Text(error)
+                                .font(.subheadline)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                                .padding(.top, 20)
+                        }
+                    }
+
+                    Spacer()
                 }
-
-                Spacer()
             }
-            .navigationTitle("Join")
+            .navigationTitle("Join Challenge")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.appBackground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") { dismiss() }.foregroundStyle(.secondary)
                 }
             }
         }
     }
-}
 
-private struct ChallengePreviewCard: View {
-    let challenge: Challenge
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(challenge.title)
-                .font(.headline)
-            HStack {
-                Image(systemName: "calendar")
-                Text("\(challenge.startDate.formatted(date: .abbreviated, time: .omitted)) – \(challenge.endDate.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondaryText)
+    @ViewBuilder
+    private func challengePreview(_ challenge: Challenge) -> some View {
+        VStack(spacing: 16) {
+            FitnessFormCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(challenge.title)
+                        .font(.headline)
+                    HStack {
+                        Image(systemName: "calendar").foregroundStyle(.tertiary)
+                        Text("\(challenge.startDate.formatted(.dateTime.month(.abbreviated).day())) – \(challenge.endDate.formatted(.dateTime.month(.abbreviated).day().year()))")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Image(systemName: "person.2").foregroundStyle(.tertiary)
+                        Text("\(challenge.participants.count) of \(challenge.maxParticipants) joined")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            HStack {
-                Image(systemName: "person.2")
-                Text("\(challenge.participants.count) / \(challenge.maxParticipants) participants")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondaryText)
+            .padding(.horizontal, 16)
+
+            Button {
+                Task {
+                    guard let userID = session.userID else { return }
+                    let hasWatch = session.currentUser?.hasAppleWatch ?? false
+                    await vm.joinChallenge(userID: userID, hasWatch: hasWatch)
+                    if vm.joined { dismiss() }
+                }
+            } label: {
+                Group {
+                    if vm.isJoining {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Join Challenge")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Color.standRing)
+                .foregroundStyle(.black)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .padding(.horizontal, 16)
+            .disabled(vm.isJoining)
+
+            if let error = vm.error {
+                Text(error).font(.caption).foregroundStyle(.red)
             }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.top, 20)
     }
 }

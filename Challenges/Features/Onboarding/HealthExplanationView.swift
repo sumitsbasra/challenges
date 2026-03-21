@@ -1,82 +1,127 @@
 import SwiftUI
 
-/// Shown before requesting HealthKit permissions. App Store review requires
-/// a contextual explanation of why each data type is needed.
+/// Pre-authorization explanation screen — required by App Store guidelines.
+/// Explains exactly why each data type is needed before the system permission sheet appears.
 struct HealthExplanationView: View {
     let onContinue: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-            // Icon cluster
-            ZStack {
-                Circle()
-                    .fill(Color.moveRing.opacity(0.12))
-                    .frame(width: 120, height: 120)
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 52))
-                    .foregroundStyle(Color.moveRing)
-            }
-            .padding(.bottom, 32)
+            VStack(spacing: 0) {
+                Spacer()
 
-            Text("Activity Access")
-                .font(.largeTitle.bold())
-                .padding(.bottom, 12)
+                // Hero icon
+                ZStack {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [Color.moveRing.opacity(0.28), Color.moveRing.opacity(0.05)],
+                                center: .center, startRadius: 20, endRadius: 70
+                            )
+                        )
+                        .frame(width: 120, height: 120)
 
-            Text("Challenges reads your Activity rings to calculate your competition score. Your data is used only to compute points — it is never shared with other participants or stored outside Apple's servers.")
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Color.secondaryText)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 40)
+                    // Mini ring stack as decoration
+                    ThreeRingView(
+                        ringData: RingData(
+                            moveRingPct: 0.85, exerciseRingPct: 1.0, standRingPct: 0.70,
+                            stepsPct: 0, activeEnergyPct: 0, syncSource: .watch
+                        ),
+                        size: 72
+                    )
+                }
+                .padding(.bottom, 28)
 
-            // What we access
-            VStack(alignment: .leading, spacing: 16) {
-                DataRowView(icon: "figure.run", color: .moveRing,
-                            title: "Move (Active Energy)",
-                            detail: "Tracks how many calories you burn while active.")
-                DataRowView(icon: "timer", color: .exerciseRing,
+                // Title
+                Text("Activity Access")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(.white)
+                    .padding(.bottom, 12)
+
+                // Body
+                Text("Challenges reads your Apple Health data to calculate your competition score. Your data is used only on your device and never shared with other participants.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color(white: 0.60))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 36)
+                    .padding(.bottom, 40)
+
+                // Data access list
+                VStack(spacing: 0) {
+                    DataRow(icon: "figure.run",    color: .moveRing,
+                            title: "Active Energy",
+                            detail: "Calories burned while active — the Move ring.")
+                    Divider().padding(.horizontal, 16)
+                    DataRow(icon: "timer",          color: .exerciseRing,
                             title: "Exercise Minutes",
-                            detail: "Minutes of brisk activity credited by Apple Watch.")
-                DataRowView(icon: "figure.stand", color: .standRing,
+                            detail: "Brisk activity credited by Apple Watch.")
+                    Divider().padding(.horizontal, 16)
+                    DataRow(icon: "figure.stand",   color: .standRing,
                             title: "Stand Hours",
-                            detail: "Hours you stood for at least one minute (Watch only).")
-                DataRowView(icon: "shoeprints.fill", color: .stepsColor,
-                            title: "Steps",
-                            detail: "Total step count (used instead of stand for iPhone users).")
+                            detail: "Hours you stood at least one minute (Watch only).")
+                    Divider().padding(.horizontal, 16)
+                    DataRow(icon: "shoeprints.fill", color: .stepsColor,
+                            title: "Step Count",
+                            detail: "Total daily steps — used instead of Stand for iPhone users.")
+                }
+                .background(Color.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .padding(.horizontal, 16)
+
+                Spacer()
+
+                // CTA
+                Button(action: onContinue) {
+                    Text("Allow Activity Access")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 17)
+                        .background(Color.moveRing)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .padding(.horizontal, 24)
+
+                Text("You can change these permissions any time in Settings.")
+                    .font(.caption2)
+                    .foregroundStyle(Color(white: 0.40))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 12)
+                    .padding(.bottom, 48)
             }
-            .padding(.horizontal, 32)
-            .padding(.bottom, 40)
-
-            Spacer()
-
-            Button("Continue") { onContinue() }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 48)
         }
-        .background(Color.appBackground.ignoresSafeArea())
     }
 }
 
-private struct DataRowView: View {
+private struct DataRow: View {
     let icon: String
     let color: Color
     let title: String
     let detail: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(color)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(detail).font(.caption).foregroundStyle(Color.secondaryText)
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 36, height: 36)
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(color)
             }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }

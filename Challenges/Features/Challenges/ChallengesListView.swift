@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - Challenges List
+
 struct ChallengesListView: View {
     @Environment(UserSession.self) private var session
     @State private var vm = ChallengesListViewModel()
@@ -8,45 +10,50 @@ struct ChallengesListView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
+
                 if vm.isLoading && vm.challenges.isEmpty {
                     ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .tint(.exerciseRing)
                 } else if vm.filteredChallenges.isEmpty {
                     emptyState
                 } else {
-                    list
+                    challengeList
                 }
             }
             .navigationTitle("Challenges")
+            .toolbarBackground(Color.appBackground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button("New Challenge") { showNewChallenge = true }
-                        Button("Join with Code") { showJoinChallenge = true }
+                        Button {
+                            showNewChallenge = true
+                        } label: {
+                            Label("New Challenge", systemImage: "trophy.fill")
+                        }
+                        Button {
+                            showJoinChallenge = true
+                        } label: {
+                            Label("Join with Code", systemImage: "qrcode.viewfinder")
+                        }
                     } label: {
-                        Image(systemName: "plus")
+                        Image(systemName: "plus.circle.fill")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.moveRing)
+                            .font(.title3)
                     }
                 }
             }
-            .safeAreaInset(edge: .top) {
-                Picker("Filter", selection: Bindable(vm).filter) {
-                    ForEach(ChallengesListViewModel.Filter.allCases, id: \.self) { f in
-                        Text(f.rawValue).tag(f)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(.regularMaterial)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                filterBar
+            }
+            .navigationDestination(for: Challenge.self) { challenge in
+                ChallengeDetailView(challenge: challenge)
             }
         }
-        .sheet(isPresented: $showNewChallenge) {
-            NewChallengeView()
-        }
-        .sheet(isPresented: $showJoinChallenge) {
-            JoinChallengeView()
-        }
+        .sheet(isPresented: $showNewChallenge) { NewChallengeView() }
+        .sheet(isPresented: $showJoinChallenge) { JoinChallengeView() }
         .task {
             guard let userID = session.userID else { return }
             await vm.load(userID: userID)
@@ -63,80 +70,143 @@ struct ChallengesListView: View {
         }
     }
 
-    private var list: some View {
-        List(vm.filteredChallenges) { challenge in
-            NavigationLink(value: challenge) {
-                ChallengeRowView(challenge: challenge, currentUserID: session.userID ?? "")
+    // MARK: - Filter Bar
+
+    private var filterBar: some View {
+        Picker("Filter", selection: Bindable(vm).filter) {
+            ForEach(ChallengesListViewModel.Filter.allCases, id: \.self) {
+                Text($0.rawValue).tag($0)
             }
         }
-        .listStyle(.insetGrouped)
-        .navigationDestination(for: Challenge.self) { challenge in
-            ChallengeDetailView(challenge: challenge)
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    // MARK: - Challenge List
+
+    private var challengeList: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ForEach(vm.filteredChallenges) { challenge in
+                    NavigationLink(value: challenge) {
+                        ChallengeCardView(challenge: challenge)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
         }
     }
 
+    // MARK: - Empty State
+
     private var emptyState: some View {
         EmptyStateView(
-            systemImage: "trophy",
+            systemImage: vm.filter == .active ? "trophy.fill" : "clock",
             title: "No \(vm.filter.rawValue.lowercased()) challenges",
             message: vm.filter == .active
-                ? "Start one with friends and see who closes their rings the most."
-                : "Your past and upcoming challenges will appear here.",
-            actionTitle: vm.filter == .active ? "Get Started" : nil,
+                ? "Start a challenge with friends and see who closes their rings the most."
+                : "Your \(vm.filter.rawValue.lowercased()) challenges will appear here.",
+            actionTitle: vm.filter == .active ? "Start a Challenge" : nil,
             action: vm.filter == .active ? { showNewChallenge = true } : nil
         )
     }
 }
 
-private struct ChallengeRowView: View {
+// MARK: - Challenge Card Row
+
+private struct ChallengeCardView: View {
     let challenge: Challenge
-    let currentUserID: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(challenge.title)
-                    .font(.headline)
-                Spacer()
-                StatusBadge(status: challenge.status)
+        HStack(spacing: 0) {
+            // Status color bar
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(statusColor)
+                .frame(width: 3)
+                .padding(.vertical, 16)
+                .padding(.leading, 16)
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .top) {
+                    Text(challenge.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    StatusPill(status: challenge.status)
+                }
+
+                HStack(spacing: 5) {
+                    Image(systemName: "calendar")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Text("\(challenge.startDate.formatted(.dateTime.month(.abbreviated).day())) – \(challenge.endDate.formatted(.dateTime.month(.abbreviated).day(.defaultDigits).year()))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 5) {
+                    Image(systemName: "person.2")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Text("Up to \(challenge.maxParticipants) people · 7 days")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
-            HStack(spacing: 4) {
-                Image(systemName: "calendar")
-                    .font(.caption)
-                    .foregroundStyle(Color.secondaryText)
-                Text(challenge.startDate, style: .date)
-                    .font(.caption)
-                    .foregroundStyle(Color.secondaryText)
-                Text("–")
-                    .font(.caption)
-                    .foregroundStyle(Color.secondaryText)
-                Text(challenge.endDate, style: .date)
-                    .font(.caption)
-                    .foregroundStyle(Color.secondaryText)
-            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.trailing, 16)
         }
-        .padding(.vertical, 4)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var statusColor: Color {
+        switch challenge.status {
+        case .active:    return .exerciseRing
+        case .pending:   return .stepsColor
+        case .completed: return Color(.systemGray4)
+        }
     }
 }
 
-private struct StatusBadge: View {
+// MARK: - Status Pill
+
+private struct StatusPill: View {
     let status: ChallengeStatus
 
     var body: some View {
-        Text(status.rawValue.capitalized)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(badgeColor)
+        Text(label)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(color)
             .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(badgeColor.opacity(0.12))
+            .padding(.vertical, 4)
+            .background(color.opacity(0.14))
             .clipShape(Capsule())
     }
 
-    private var badgeColor: Color {
+    private var label: String {
+        switch status {
+        case .active:    return "Active"
+        case .pending:   return "Upcoming"
+        case .completed: return "Ended"
+        }
+    }
+
+    private var color: Color {
         switch status {
         case .active:    return .exerciseRing
         case .pending:   return .stepsColor
-        case .completed: return .secondaryText
+        case .completed: return .secondary
         }
     }
 }

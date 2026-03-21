@@ -7,63 +7,108 @@ struct NewChallengeView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Challenge Details") {
-                    TextField("Challenge name", text: Bindable(vm).title)
-                        .textInputAutocapitalization(.words)
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                    DatePicker("Start Date",
-                               selection: Bindable(vm).startDate,
-                               in: tomorrow...,
-                               displayedComponents: .date)
+                ScrollView {
+                    VStack(spacing: 20) {
 
-                    HStack {
-                        Text("End Date")
-                        Spacer()
-                        Text(vm.endDate, style: .date)
-                            .foregroundStyle(Color.secondaryText)
-                    }
-                }
+                        // Title field
+                        FitnessFormCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("Challenge Name", systemImage: "trophy.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.moveRing)
+                                TextField("e.g. Summer Ring Crush", text: Bindable(vm).title)
+                                    .font(.body)
+                                    .textInputAutocapitalization(.words)
+                            }
+                        }
 
-                Section("Participants") {
-                    Stepper("Max \(vm.maxParticipants) participants",
-                            value: Bindable(vm).maxParticipants,
-                            in: 2...20)
-                }
+                        // Date section
+                        FitnessFormCard {
+                            VStack(spacing: 12) {
+                                DatePicker("Start Date",
+                                           selection: Bindable(vm).startDate,
+                                           in: tomorrow...,
+                                           displayedComponents: .date)
+                                    .foregroundStyle(.primary)
 
-                Section("Invite Code") {
-                    VStack(alignment: .center, spacing: 12) {
-                        InviteCodeView(code: vm.inviteCode)
-                        Text("Share this code with friends so they can join your challenge.")
-                            .font(.caption)
-                            .foregroundStyle(Color.secondaryText)
-                            .multilineTextAlignment(.center)
+                                Divider()
 
-                        ShareLink(
-                            item: URL(string: "challenges://join/\(vm.inviteCode)")!,
-                            message: Text("Join my fitness challenge! Use code \(vm.inviteCode)")
-                        ) {
-                            Label("Share Invite", systemImage: "square.and.arrow.up")
+                                HStack {
+                                    Label("End Date", systemImage: "flag.checkered")
+                                        .font(.body)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Text(vm.endDate.formatted(.dateTime.month(.abbreviated).day().year()))
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                HStack {
+                                    Image(systemName: "info.circle")
+                                        .font(.caption)
+                                    Text("All challenges run for exactly 7 days.")
+                                        .font(.caption)
+                                }
+                                .foregroundStyle(.tertiary)
+                            }
+                        }
+
+                        // Max participants
+                        FitnessFormCard {
+                            Stepper {
+                                HStack {
+                                    Label("Max Participants", systemImage: "person.2.fill")
+                                        .font(.body)
+                                    Spacer()
+                                    Text("\(vm.maxParticipants)")
+                                        .font(.body.weight(.semibold).monospacedDigit())
+                                        .foregroundStyle(.exerciseRing)
+                                        .frame(width: 30, alignment: .trailing)
+                                }
+                            } onIncrement: {
+                                if vm.maxParticipants < 20 { vm.maxParticipants += 1 }
+                            } onDecrement: {
+                                if vm.maxParticipants > 2 { vm.maxParticipants -= 1 }
+                            }
+                        }
+
+                        // Invite code preview
+                        FitnessFormCard {
+                            VStack(spacing: 14) {
+                                InviteCodeView(code: vm.inviteCode)
+                                Text("Share this code after creating your challenge.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+
+                        if let error = vm.error {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .padding(.horizontal, 16)
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                }
-
-                if let error = vm.error {
-                    Section {
-                        Text(error).foregroundStyle(.red).font(.caption)
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 32)
                 }
             }
             .navigationTitle("New Challenge")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.appBackground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .foregroundStyle(.secondary)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if vm.isSaving {
-                        ProgressView()
+                        ProgressView().tint(.moveRing)
                     } else {
                         Button("Create") {
                             Task {
@@ -72,6 +117,8 @@ struct NewChallengeView: View {
                                 if vm.createdChallenge != nil { dismiss() }
                             }
                         }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(vm.canCreate ? .moveRing : .tertiary)
                         .disabled(!vm.canCreate)
                     }
                 }
@@ -83,3 +130,4 @@ struct NewChallengeView: View {
         Calendar.current.date(byAdding: .day, value: 1, to: Date())!
     }
 }
+

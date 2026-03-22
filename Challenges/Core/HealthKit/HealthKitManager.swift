@@ -9,6 +9,8 @@ final class HealthKitManager: ObservableObject {
 
     let store = HKHealthStore()
 
+    nonisolated init() {}
+
     @Published var authorizationStatus: AuthorizationStatus = .unknown
 
     enum AuthorizationStatus {
@@ -53,25 +55,34 @@ final class HealthKitManager: ObservableObject {
     }
 
     /// Refreshes the published authorization status based on current HealthKit state.
+    /// Uses `statusForAuthorizationRequest` because we only request READ access —
+    /// `authorizationStatus(for:)` only reflects write (share) authorization, which
+    /// will always be `.sharingDenied` when `toShare` is empty.
     func updateAuthorizationStatus() {
-        let coreTypes: [HKObjectType] = [
-            HKQuantityType(.activeEnergyBurned),
-            HKQuantityType(.stepCount),
-        ]
-
-        let allAuthorized = coreTypes.allSatisfy {
-            store.authorizationStatus(for: $0) == .sharingAuthorized
-        }
-        let anyAuthorized = coreTypes.contains {
-            store.authorizationStatus(for: $0) == .sharingAuthorized
-        }
-
-        if allAuthorized {
-            authorizationStatus = .authorized
-        } else if anyAuthorized {
-            authorizationStatus = .partiallyAuthorized
-        } else {
-            authorizationStatus = .denied
+        Task {
+            guard HKHealthStore.isHealthDataAvailable() else {
+                authorizationStatus = .denied
+                return
+            }
+            guard let status = try? await store.statusForAuthorizationRequest(
+                toShare: [],
+                read: Self.readTypes
+            ) else {
+                authorizationStatus = .unknown
+                return
+            }
+            // .unnecessary means the user has already been shown the dialog for all
+            // requested types (they may have allowed or denied individual items, but
+            // HealthKit hides per-type read authorization for user privacy).
+            // .shouldRequest means the dialog hasn't been shown yet.
+            switch status {
+            case .unnecessary:
+                authorizationStatus = .authorized
+            case .shouldRequest, .unknown:
+                authorizationStatus = .unknown
+            @unknown default:
+                authorizationStatus = .unknown
+            }
         }
     }
 }

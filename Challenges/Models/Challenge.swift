@@ -4,7 +4,7 @@ enum ChallengeStatus: String, Codable, CaseIterable {
     case pending, active, completed
 }
 
-struct Challenge: Identifiable, Codable {
+struct Challenge: Identifiable, Codable, Hashable {
     let id: String
     var title: String
     var creatorID: String
@@ -24,4 +24,7 @@ struct Challenge: Identifiable, Codable {
     static func makeEndDate(from startDate: Date) -> Date {
         Calendar.current.date(byAdding: .day, value: durationDays - 1, to: startDate)!
     }
+
+    static func == (lhs: Challenge, rhs: Challenge) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }

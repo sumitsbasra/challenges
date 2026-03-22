@@ -7,7 +7,7 @@ enum RecordMapper {
     // MARK: - Record type names
 
     enum RecordType {
-        static let user          = "User"
+        static let user          = "Users"
         static let challenge     = "Challenge"
         static let participation = "Participation"
         static let dailyScore    = "DailyScore"
@@ -56,10 +56,10 @@ enum RecordMapper {
             let statusStr  = record["status"] as? String,
             let status     = ChallengeStatus(rawValue: statusStr),
             let inviteCode = record["inviteCode"] as? String,
-            let maxPart    = record["maxParticipants"] as? Int,
             let createdAt  = record["createdAt"] as? Date
         else { return nil }
 
+        let maxParticipants = record["maxParticipants"] as? Int ?? 20
         return Challenge(
             id: record.recordID.recordName,
             title: title,
@@ -68,7 +68,7 @@ enum RecordMapper {
             endDate: endDate,
             status: status,
             inviteCode: inviteCode,
-            maxParticipants: maxPart,
+            maxParticipants: maxParticipants,
             createdAt: createdAt
         )
     }
@@ -84,7 +84,6 @@ enum RecordMapper {
         record["endDate"]          = challenge.endDate
         record["status"]           = challenge.status.rawValue
         record["inviteCode"]       = challenge.inviteCode
-        record["maxParticipants"]  = challenge.maxParticipants
         record["createdAt"]        = challenge.createdAt
         return record
     }

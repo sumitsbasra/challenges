@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HealthPermissionsView: View {
     @ObservedObject private var hk = HealthKitManager.shared
+    @State private var isRequesting = false
 
     var body: some View {
         List {
@@ -23,14 +24,36 @@ struct HealthPermissionsView: View {
                 case .partiallyAuthorized:
                     Text("Some permissions are missing. Your competition score may be incomplete.")
                 case .denied, .unknown:
-                    Text("Health access is denied. Open Settings to grant permissions.")
+                    Text("Tap \"Request Permissions\" to grant access. If the prompt doesn't appear, open Settings → Privacy & Security → Health → Challenges.")
                 }
             }
 
             if hk.authorizationStatus != .authorized {
                 Section {
-                    Button("Open Settings") {
-                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                    Button {
+                        isRequesting = true
+                        Task {
+                            try? await hk.requestAuthorization()
+                            isRequesting = false
+                        }
+                    } label: {
+                        HStack {
+                            Text("Request Permissions")
+                            if isRequesting {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isRequesting)
+
+                    Button("Open Health Settings") {
+                        // Deep-links into the Health app; falls back to app Settings.
+                        let healthURL = URL(string: "x-apple-health://")
+                        let settingsURL = URL(string: UIApplication.openSettingsURLString)
+                        if let url = healthURL, UIApplication.shared.canOpenURL(url) {
+                            UIApplication.shared.open(url)
+                        } else if let url = settingsURL {
                             UIApplication.shared.open(url)
                         }
                     }

@@ -1,25 +1,40 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class NewChallengeViewModel {
 
     var title: String = ""
-    var startDate: Date = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
-    var maxParticipants: Int = 10
+    var startDate: Date = Calendar.current.date(byAdding: .day, value: 1, to: Date())! {
+        didSet {
+            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+            if startDate < tomorrow { startDate = tomorrow }
+            if endDate < startDate { endDate = startDate }
+        }
+    }
+    var endDate: Date = Calendar.current.date(byAdding: .day, value: 7, to: Date())! {
+        didSet {
+            if endDate < startDate { endDate = startDate }
+        }
+    }
+    var maxParticipants: Int = 50
+
+    var durationDays: Int {
+        max(1, (Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0) + 1)
+    }
 
     var isSaving: Bool = false
     var error: String? = nil
     var createdChallenge: Challenge? = nil
 
-    var endDate: Date { Challenge.makeEndDate(from: startDate) }
-    var inviteCode: String = Self.generateCode()
+    var inviteCode: String = NewChallengeViewModel.generateCode()
     var canCreate: Bool { !title.trimmingCharacters(in: .whitespaces).isEmpty }
 
     private let ck = CloudKitManager.shared
 
     @MainActor
-    func create(creatorID: String) async {
+    func create(creator: AppUser) async {
         guard canCreate else { return }
         isSaving = true
         error = nil
@@ -28,7 +43,7 @@ final class NewChallengeViewModel {
         let challenge = Challenge(
             id: UUID().uuidString,
             title: title.trimmingCharacters(in: .whitespaces),
-            creatorID: creatorID,
+            creatorID: creator.id,
             startDate: startDate,
             endDate: endDate,
             status: .pending,
@@ -37,12 +52,43 @@ final class NewChallengeViewModel {
             createdAt: Date()
         )
 
+        // Step 1: save the challenge
         do {
             try await ck.saveChallenge(challenge)
-            createdChallenge = challenge
         } catch {
-            self.error = error.localizedDescription
+            self.error = "Could not create challenge: \(error.localizedDescription)"
+            return
         }
+
+        // Step 2: auto-join creator (separate save — challenge is already committed above)
+        let participation = Participation(
+            id: UUID().uuidString,
+            challengeID: challenge.id,
+            user: creator,
+            joinedAt: Date(),
+            status: .active,
+            hasAppleWatch: creator.hasAppleWatch
+        )
+        var lastParticipationError: Error? = nil
+        for attempt in 0..<3 {
+            do {
+                try await ck.saveParticipation(participation)
+                lastParticipationError = nil
+                break
+            } catch {
+                lastParticipationError = error
+                if attempt < 2 {
+                    try? await Task.sleep(for: .milliseconds(500))
+                }
+            }
+        }
+        if let error = lastParticipationError {
+            self.error = "Challenge created but auto-join failed: \(error.localizedDescription)"
+            print("[NewChallenge] saveParticipation failed after 3 attempts: \(error)")
+        }
+
+        createdChallenge = challenge
+        NotificationCenter.default.post(name: .participationDidChange, object: nil)
     }
 
     static func generateCode() -> String {

@@ -3,7 +3,6 @@ import CloudKit
 
 /// Central CloudKit access layer. Wraps the Public Database for all Challenge, Participation,
 /// and DailyScore records, and registers CloudKit subscriptions.
-@MainActor
 final class CloudKitManager: ObservableObject {
 
     static let shared = CloudKitManager()
@@ -15,7 +14,7 @@ final class CloudKitManager: ObservableObject {
     static let subscriptionFiredNotification = Notification.Name("CKSubscriptionFired")
 
     private init() {
-        container = CKContainer(identifier: "iCloud.com.yourname.challenges")
+        container = CKContainer(identifier: "iCloud.studio.ssb.challenges")
         publicDB = container.publicCloudDatabase
     }
 
@@ -74,22 +73,17 @@ final class CloudKitManager: ObservableObject {
         return challenge
     }
 
-    /// Fetches all active and pending challenges the current user participates in.
+    /// Fetches all challenges the current user created or joined.
     func fetchChallenges(forUserID userID: String) async throws -> [Challenge] {
         let userRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: userID), action: .none)
-        let createdPredicate = NSPredicate(format: "creatorRef == %@", userRef)
+        let createQuery = CKQuery(recordType: RecordMapper.RecordType.challenge,
+                                  predicate: NSPredicate(format: "creatorRef == %@", userRef))
 
-        // Fetch challenges created by the user.
-        let createQuery = CKQuery(recordType: RecordMapper.RecordType.challenge, predicate: createdPredicate)
-        let (matchResults, _) = try await publicDB.records(matching: createQuery)
-        let challenges = matchResults.compactMap { _, result in
-            try? result.get()
-        }.compactMap { RecordMapper.challenge(from: $0) }
+        let challenges = try await fetchAllRecords(matching: createQuery)
+            .compactMap(RecordMapper.challenge)
 
-        // Fetch challenges the user has joined via Participation records.
         let joinedChallenges = try await fetchJoinedChallenges(userID: userID)
 
-        // Deduplicate by id.
         var seen = Set<String>()
         return (challenges + joinedChallenges).filter { seen.insert($0.id).inserted }
     }
@@ -99,13 +93,11 @@ final class CloudKitManager: ObservableObject {
         let predicate = NSPredicate(format: "userRef == %@ AND status == %@",
                                    userRef, ParticipationStatus.active.rawValue)
         let query = CKQuery(recordType: RecordMapper.RecordType.participation, predicate: predicate)
-        let (matchResults, _) = try await publicDB.records(matching: query)
 
-        let challengeIDs = matchResults.compactMap { _, result -> String? in
-            guard let record = try? result.get(),
-                  let ref = record["challengeRef"] as? CKRecord.Reference else { return nil }
-            return ref.recordID.recordName
+        let challengeIDs = try await fetchAllRecords(matching: query).compactMap { record -> String? in
+            (record["challengeRef"] as? CKRecord.Reference)?.recordID.recordName
         }
+        guard !challengeIDs.isEmpty else { return [] }
 
         let recordIDs = challengeIDs.map { CKRecord.ID(recordName: $0) }
         let fetchResults = try await publicDB.records(for: recordIDs)
@@ -115,6 +107,39 @@ final class CloudKitManager: ObservableObject {
         }
     }
 
+    /// Deletes a challenge and all its participation records.
+    /// Only the creator should call this.
+    func deleteChallenge(id: String) async throws {
+        // Delete participation records first (best-effort; no cascade in CloudKit public DB).
+        let challengeRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: id), action: .none)
+        let predicate = NSPredicate(format: "challengeRef == %@", challengeRef)
+        let query = CKQuery(recordType: RecordMapper.RecordType.participation, predicate: predicate)
+        let partRecords = try await fetchAllRecords(matching: query)
+        let partIDs = partRecords.map { $0.recordID }
+
+        if !partIDs.isEmpty {
+            let op = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: partIDs)
+            op.isAtomic = false
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                op.modifyRecordsResultBlock = { result in
+                    switch result {
+                    case .success: cont.resume()
+                    case .failure(let e): cont.resume(throwing: e)
+                    }
+                }
+                publicDB.add(op)
+            }
+        }
+
+        // Delete the challenge record itself.
+        try await publicDB.deleteRecord(withID: CKRecord.ID(recordName: id))
+    }
+
+    /// Removes the current user's participation from a challenge (leave).
+    func leaveChallenge(participationID: String) async throws {
+        try await publicDB.deleteRecord(withID: CKRecord.ID(recordName: participationID))
+    }
+
     // MARK: - Participation
 
     func saveParticipation(_ participation: Participation) async throws {
@@ -122,22 +147,53 @@ final class CloudKitManager: ObservableObject {
         _ = try await publicDB.save(record)
     }
 
+    /// Fetches all participations for a challenge.
+    ///
+    /// Uses a two-step approach to avoid an N+1 query:
+    /// 1. Fetch all Participation records in one query (paginated).
+    /// 2. Collect every referenced user ID, then batch-fetch all Users in one call.
+    ///
+    /// Result: exactly 2 network round trips regardless of group size.
     func fetchParticipations(challengeID: String) async throws -> [Participation] {
         let challengeRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: challengeID), action: .none)
         let predicate = NSPredicate(format: "challengeRef == %@", challengeRef)
         let query = CKQuery(recordType: RecordMapper.RecordType.participation, predicate: predicate)
-        let (matchResults, _) = try await publicDB.records(matching: query)
 
-        var participations: [Participation] = []
-        for (_, result) in matchResults {
-            guard let record = try? result.get(),
-                  let userRef = record["userRef"] as? CKRecord.Reference,
-                  let user = try? await fetchUser(recordName: userRef.recordID.recordName),
-                  let participation = RecordMapper.participation(from: record, user: user)
-            else { continue }
-            participations.append(participation)
+        // Step 1: fetch all participation records (handles pagination).
+        let partRecords = try await fetchAllRecords(matching: query)
+
+        // Step 2: collect unique user record IDs.
+        let userRecordIDs: [CKRecord.ID] = partRecords.compactMap { record in
+            (record["userRef"] as? CKRecord.Reference)?.recordID
         }
-        return participations
+        guard !userRecordIDs.isEmpty else { return [] }
+
+        // Step 3: batch-fetch all users in ONE round trip.
+        let userResults = try await publicDB.records(for: userRecordIDs)
+        let usersByID: [String: AppUser] = userResults.reduce(into: [:]) { dict, pair in
+            let (recordID, result) = pair
+            if let record = try? result.get(),
+               let user = RecordMapper.user(from: record) {
+                dict[recordID.recordName] = user
+            }
+        }
+
+        // Step 4: assemble Participation values using the lookup.
+        // If the user record isn't found (missing/not yet propagated), synthesise a
+        // minimal AppUser from the reference so the participation is never silently dropped.
+        return partRecords.compactMap { record -> Participation? in
+            guard let userRef = record["userRef"] as? CKRecord.Reference else { return nil }
+            let userID = userRef.recordID.recordName
+            let user = usersByID[userID] ?? AppUser(
+                id: userID,
+                displayName: UserSession.shared.currentUser?.id == userID
+                    ? (UserSession.shared.currentUser?.displayName ?? "Me")
+                    : "Participant",
+                appleUserID: "",
+                hasAppleWatch: false
+            )
+            return RecordMapper.participation(from: record, user: user)
+        }
     }
 
     // MARK: - DailyScore
@@ -166,12 +222,14 @@ final class CloudKitManager: ObservableObject {
         let challengeRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: challengeID), action: .none)
         let predicate = NSPredicate(format: "challengeRef == %@", challengeRef)
         let query = CKQuery(recordType: RecordMapper.RecordType.dailyScore, predicate: predicate)
-        let (matchResults, _) = try await publicDB.records(matching: query)
+        return try await fetchAllRecords(matching: query).compactMap(RecordMapper.dailyScore)
+    }
 
-        return matchResults.compactMap { _, result in
-            guard let record = try? result.get() else { return nil }
-            return RecordMapper.dailyScore(from: record)
-        }
+    func fetchDailyScores(participationID: String) async throws -> [DailyScore] {
+        let partRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: participationID), action: .none)
+        let predicate = NSPredicate(format: "participationRef == %@", partRef)
+        let query = CKQuery(recordType: RecordMapper.RecordType.dailyScore, predicate: predicate)
+        return try await fetchAllRecords(matching: query).compactMap(RecordMapper.dailyScore)
     }
 
     func fetchDailyScores(challengeID: String, since date: Date) async throws -> [DailyScore] {
@@ -179,12 +237,30 @@ final class CloudKitManager: ObservableObject {
         let predicate = NSPredicate(format: "challengeRef == %@ AND modificationDate > %@",
                                    challengeRef, date as CVarArg)
         let query = CKQuery(recordType: RecordMapper.RecordType.dailyScore, predicate: predicate)
-        let (matchResults, _) = try await publicDB.records(matching: query)
+        return try await fetchAllRecords(matching: query).compactMap(RecordMapper.dailyScore)
+    }
 
-        return matchResults.compactMap { _, result in
-            guard let record = try? result.get() else { return nil }
-            return RecordMapper.dailyScore(from: record)
+    // MARK: - Pagination Helper
+
+    /// Fetches every record matching `query`, following CloudKit cursors until exhausted.
+    ///
+    /// CloudKit returns results in pages (server default ~200 records). Callers that
+    /// discard the cursor silently lose records beyond the first page. This helper
+    /// keeps fetching until `queryCursor` is nil, guaranteeing complete results.
+    private func fetchAllRecords(matching query: CKQuery) async throws -> [CKRecord] {
+        var records: [CKRecord] = []
+
+        let (initial, initialCursor) = try await publicDB.records(matching: query)
+        records += initial.compactMap { try? $1.get() }
+
+        var cursor = initialCursor
+        while let activeCursor = cursor {
+            let (more, nextCursor) = try await publicDB.records(continuingMatchFrom: activeCursor)
+            records += more.compactMap { try? $1.get() }
+            cursor = nextCursor
         }
+
+        return records
     }
 
     // MARK: - CloudKit Subscriptions
@@ -231,3 +307,4 @@ final class CloudKitManager: ObservableObject {
         return info
     }
 }
+

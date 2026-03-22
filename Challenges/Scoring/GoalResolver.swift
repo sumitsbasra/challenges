@@ -3,7 +3,6 @@ import HealthKit
 
 /// Resolves the user's activity goals from HealthKit (Watch path) or from
 /// stored preferences (non-Watch path).
-@MainActor
 final class GoalResolver {
 
     private let healthStore: HKHealthStore
@@ -50,8 +49,12 @@ final class GoalResolver {
             let today = calendar.startOfDay(for: Date())
             let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
 
-            let predicate = HKQuery.predicate(forActivitySummariesBetweenStart: calendar.dateComponents([.year, .month, .day], from: today),
-                                              end: calendar.dateComponents([.year, .month, .day], from: tomorrow))
+            var startComponents = calendar.dateComponents([.year, .month, .day], from: today)
+            startComponents.calendar = calendar
+            var endComponents = calendar.dateComponents([.year, .month, .day], from: tomorrow)
+            endComponents.calendar = calendar
+            let predicate = HKQuery.predicate(forActivitySummariesBetweenStart: startComponents,
+                                              end: endComponents)
 
             let query = HKActivitySummaryQuery(predicate: predicate) { _, summaries, _ in
                 let goal = summaries?.first?.activeEnergyBurnedGoal.doubleValue(for: .kilocalorie()) ?? 400

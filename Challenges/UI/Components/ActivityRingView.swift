@@ -18,13 +18,10 @@ struct ActivityRingView: View {
     var body: some View {
         ZStack {
             trackRing
-            if capped > 0 {
-                mainArc
-                tipGlow(at: capped, inset: 0)
-            }
+            if capped > 0 { mainArc }
             if over > 0 {
-                overArc
-                tipGlow(at: over, inset: lineWidth * 0.175)
+                overShadowArc  // dark blurred arc — edges bleed beyond overArc stroke
+                overArc        // solid color arc covers shadow center
             }
         }
         .onAppear {
@@ -41,57 +38,40 @@ struct ActivityRingView: View {
 
     // MARK: - Sub-views
 
-    /// Dim track behind the filled arc
+    /// Dim track behind the arc.
     private var trackRing: some View {
         Circle()
-            .stroke(color.opacity(0.13), lineWidth: lineWidth)
+            .stroke(color.opacity(0.18), lineWidth: lineWidth)
     }
 
-    /// Main arc with angular gradient for depth (darker at start, full color at tip)
+    /// Main arc: solid color, rounded ends.
     private var mainArc: some View {
         Circle()
             .trim(from: 0, to: capped)
-            .stroke(
-                AngularGradient(
-                    stops: [
-                        .init(color: color.opacity(0.80), location: 0.0),
-                        .init(color: color,               location: 0.9),
-                        .init(color: color,               location: 1.0),
-                    ],
-                    center: .center,
-                    startAngle: .degrees(-90),
-                    endAngle: .degrees(capped * 360 - 90)
-                ),
-                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-            )
+            .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
             .rotationEffect(.degrees(-90))
     }
 
-    /// Second-lap arc (100–200%) drawn at slightly smaller radius with 75% opacity
-    private var overArc: some View {
-        let inset = lineWidth * 0.175
+    /// Shadow only near the tip of the overArc (last 10% of the arc).
+    /// Keeps shadow away from 12 o'clock for partial arcs, while for 200%
+    /// it covers the region just before 12 o'clock where it bleeds visibly.
+    private var overShadowArc: some View {
+        let clamped = min(over, 0.9999)
+        let shadowStart = max(clamped - 0.10, 0)
         return Circle()
-            .trim(from: 0, to: over)
-            .stroke(
-                color.opacity(0.80),
-                style: StrokeStyle(lineWidth: lineWidth * 0.72, lineCap: .round)
-            )
+            .trim(from: shadowStart, to: clamped)
+            .stroke(Color.black.opacity(0.5),
+                    style: StrokeStyle(lineWidth: lineWidth * 1.6, lineCap: .round))
             .rotationEffect(.degrees(-90))
-            .padding(inset)
+            .blur(radius: lineWidth * 0.5)
     }
 
-    /// Soft radial glow at the leading tip of the arc — creates Apple's signature 3-D lift
-    @ViewBuilder
-    private func tipGlow(at tipProgress: Double, inset: CGFloat) -> some View {
-        let span = 0.028
+    /// Overlap arc: solid color, rounded ends, on top of the shadow arc.
+    private var overArc: some View {
         Circle()
-            .trim(from: max(0, tipProgress - span), to: tipProgress)
-            .stroke(color, style: StrokeStyle(lineWidth: lineWidth * 1.7, lineCap: .round))
+            .trim(from: 0, to: min(over, 0.9999))
+            .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
             .rotationEffect(.degrees(-90))
-            .padding(inset)
-            .blur(radius: lineWidth * 0.55)
-            .opacity(0.55)
-            .allowsHitTesting(false)
     }
 }
 
@@ -104,8 +84,8 @@ struct ThreeRingView: View {
     let size: CGFloat
 
     var body: some View {
-        let lw  = size * 0.096   // ring line width
-        let gap = lw * 1.72      // gap between rings
+        let lw  = size * 0.115   // ring line width
+        let gap = lw * 1.3       // gap between rings
 
         ZStack {
             ActivityRingView(progress: ringData.moveRingPct,
@@ -131,8 +111,8 @@ struct TwoRingView: View {
     let size: CGFloat
 
     var body: some View {
-        let lw  = size * 0.115
-        let gap = lw * 1.80
+        let lw  = size * 0.132
+        let gap = lw * 1.3
 
         ZStack {
             ActivityRingView(progress: ringData.stepsPct,

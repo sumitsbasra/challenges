@@ -10,7 +10,7 @@ actor WatchDetector {
 
     private let store: HKHealthStore
 
-    init(store: HKHealthStore = HealthKitManager.shared.store) {
+    init(store: HKHealthStore = HKHealthStore()) {
         self.store = store
     }
 

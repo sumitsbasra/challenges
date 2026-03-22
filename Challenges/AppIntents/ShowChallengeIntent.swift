@@ -20,12 +20,4 @@ struct ShowChallengeIntent: AppIntent {
     }
 }
 
-// MARK: - Shared Notification Names
 
-extension Notification.Name {
-    /// Posted when any code path (intent, Siri, Spotlight) wants to navigate to a specific challenge.
-    static let openChallenge = Notification.Name("com.challenges.openChallenge")
-
-    /// Posted when the Create Challenge intent fires.
-    static let openNewChallenge = Notification.Name("com.challenges.openNewChallenge")
-}

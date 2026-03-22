@@ -166,7 +166,7 @@ private struct ChallengeCardView: View {
                     Image(systemName: "person.2")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
-                    Text("Up to \(challenge.maxParticipants) people · 7 days")
+                    Text("7 days")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -219,7 +219,7 @@ private struct StatusPill: View {
         switch status {
         case .active:    return .exerciseRing
         case .pending:   return .stepsColor
-        case .completed: return .secondary
+        case .completed: return Color(.systemGray4)
         }
     }
 }

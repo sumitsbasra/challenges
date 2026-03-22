@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class ChallengesListViewModel {
 
@@ -34,9 +35,6 @@ final class ChallengesListViewModel {
 
         do {
             challenges = try await ck.fetchChallenges(forUserID: userID)
-            // Index active and pending challenges in Core Spotlight so they appear
-            // in system search and can be tapped to open the detail view directly.
-            SpotlightIndexer.index(challenges)
         } catch {
             self.error = error.localizedDescription
         }

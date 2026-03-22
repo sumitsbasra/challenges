@@ -1,6 +1,7 @@
 import Foundation
 import HealthKit
 
+
 /// Orchestrates the core app loop:
 ///   1. Fetch activity data from HealthKit for each day of active challenges.
 ///   2. Calculate points using PointsCalculator.
@@ -11,7 +12,6 @@ actor SyncCoordinator {
 
     static let shared = SyncCoordinator()
 
-    private let ck = CloudKitManager.shared
     private let fetcher = ActivityDataFetcher()
     private let watchDetector = WatchDetector()
 
@@ -21,7 +21,8 @@ actor SyncCoordinator {
 
     /// Sync all active challenges for the current user.
     func syncCurrentChallenges() async {
-        guard let userID = await UserSession.shared.userID else { return }
+        guard let userID = UserSession.shared.userID else { return }
+        let ck = await MainActor.run { CloudKitManager.shared }
 
         do {
             let allChallenges = try await ck.fetchChallenges(forUserID: userID)
@@ -32,8 +33,8 @@ actor SyncCoordinator {
                 await syncChallenge(challenge, userID: userID)
             }
 
-            // Update the widget with the user's current rank in their most active challenge.
-            await updateWidgetState(userID: userID, activeChallenges: active)
+            // Widget state update requires WidgetDataWriter to be added to the app target.
+            // await updateWidgetState(userID: userID, activeChallenges: active)
         } catch {
             print("[SyncCoordinator] Failed to fetch challenges: \(error)")
         }
@@ -42,6 +43,7 @@ actor SyncCoordinator {
     // MARK: - Per-challenge sync
 
     private func syncChallenge(_ challenge: Challenge, userID: String) async {
+        let ck = await MainActor.run { CloudKitManager.shared }
         // Find the current user's participation record.
         guard let participation = try? await ck.fetchParticipations(challengeID: challenge.id)
             .first(where: { $0.user.id == userID && $0.status == .active })
@@ -66,16 +68,14 @@ actor SyncCoordinator {
 
         if hasWatch {
             let summaries = await fetcher.activitySummaries(from: startDay, to: endDay)
-            let goalResolver = await GoalResolver()
+            let goalResolver = GoalResolver()
             let moveGoal = await goalResolver.moveGoal()
 
             for day in days {
                 let summary = summaries[day]
                 let moveCalories = summary?.activeEnergyBurned.doubleValue(for: .kilocalorie()) ?? 0
                 let exerciseMins = summary?.appleExerciseTime.doubleValue(for: .minute()) ?? 0
-                let standHours   = summary?.appleStandHoursGoal > 0
-                    ? (summary?.appleStandHours.doubleValue(for: .count()) ?? 0)
-                    : 0
+                let standHours   = summary?.appleStandHours.doubleValue(for: .count()) ?? 0
 
                 let (points, ringData) = PointsCalculator.calculateWatch(
                     moveCalories: moveCalories, moveGoal: moveGoal,
@@ -96,16 +96,18 @@ actor SyncCoordinator {
                 ))
             }
         } else {
-            let goalResolver = await GoalResolver()
+            let goalResolver = GoalResolver()
 
             for day in days {
                 async let stepsTask   = fetcher.steps(on: day)
                 async let energyTask  = fetcher.activeEnergy(on: day)
                 let (steps, energy) = await (stepsTask, energyTask)
 
+                let stepsGoal = goalResolver.stepsGoal
+                let energyGoal = goalResolver.activeEnergyGoal
                 let (points, ringData) = PointsCalculator.calculateNonWatch(
-                    steps: steps, stepsGoal: goalResolver.stepsGoal,
-                    activeEnergy: energy, activeEnergyGoal: goalResolver.activeEnergyGoal
+                    steps: steps, stepsGoal: stepsGoal,
+                    activeEnergy: energy, activeEnergyGoal: energyGoal
                 )
 
                 let noonUTC = DailyScore.noonUTC(for: day)
@@ -130,52 +132,13 @@ actor SyncCoordinator {
         }
     }
 
-    // MARK: - Widget state
-
-    /// Computes the user's rank in their first active challenge and writes a
-    /// WidgetState snapshot to the shared App Group UserDefaults.
-    /// The widget reads this data without needing direct CloudKit access.
-    private func updateWidgetState(userID: String, activeChallenges: [Challenge]) async {
-        guard let challenge = activeChallenges.first else { return }
-
-        do {
-            var participations = try await ck.fetchParticipations(challengeID: challenge.id)
-            let scores = try await ck.fetchDailyScores(challengeID: challenge.id)
-
-            for i in participations.indices {
-                participations[i].dailyScores = scores.filter {
-                    $0.participationID == participations[i].id
-                }
-            }
-
-            let ranked = ScoreAggregator.ranked(participations)
-            guard let mine = ranked.first(where: { $0.user.id == userID }) else { return }
-
-            let daysRemaining = max(0, Calendar.current.dateComponents(
-                [.day], from: Date(), to: challenge.endDate
-            ).day ?? 0)
-
-            let state = WidgetState(
-                challengeTitle: challenge.title,
-                challengeID: challenge.id,
-                rank: mine.rank,
-                totalPoints: mine.totalPoints,
-                daysRemaining: daysRemaining,
-                participantCount: ranked.count,
-                updatedAt: Date()
-            )
-            WidgetDataWriter.write(state: state)
-        } catch {
-            print("[SyncCoordinator] Widget state update failed: \(error)")
-        }
-    }
-
     // MARK: - Challenge lifecycle transitions
 
     /// Transitions pending challenges to active and active challenges to completed
     /// based on the current date. The first client to open the app after a boundary
     /// performs the write; all others receive it via CloudKit subscription.
     private func transitionPendingChallenges(_ challenges: [Challenge]) async {
+        let ck = await MainActor.run { CloudKitManager.shared }
         let now = Date()
         for challenge in challenges {
             do {

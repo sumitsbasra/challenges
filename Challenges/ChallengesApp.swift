@@ -2,6 +2,26 @@ import SwiftUI
 import BackgroundTasks
 import CoreSpotlight
 
+// MARK: - Shared UI Components
+
+/// Reusable dark card container used inside form-style sheets (New Challenge, Join).
+struct FitnessFormCard<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+    var body: some View {
+        content()
+            .padding(16)
+            .background(Color.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let openChallenge    = Notification.Name("com.challenges.openChallenge")
+    static let openNewChallenge = Notification.Name("com.challenges.openNewChallenge")
+}
+
 // MARK: - App Entry Point
 
 @main
@@ -28,7 +48,7 @@ struct ContentView: View {
 
     var body: some View {
         if session.isAuthenticated {
-            MainTabView()
+            HomeView()
         } else {
             OnboardingView()
         }
@@ -42,7 +62,7 @@ struct MainTabView: View {
 
     var body: some View {
         TabView {
-            ChallengesListView()
+            HomeView()
                 .tabItem {
                     Label("Challenges", systemImage: "trophy.fill")
                 }

@@ -2,81 +2,68 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.challenges.sync</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Challenges</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.yourname.challenges</string>
-	<key>CFBundleName</key>
-	<string>Challenges</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleName</key>
+	<string>Challenges</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>studio.ssb.challenges</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>challenges</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CKContainerIdentifiers</key>
+	<array>
+		<string>iCloud.studio.ssb.challenges</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>MinimumOSVersion</key>
 	<string>17.0</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Challenges reads your Activity rings, steps, and active energy to calculate your competition score. Your data never leaves Apple's servers.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Challenges does not write any health data.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.challenges.viewChallenge</string>
+		<string>com.challenges.checkRank</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
-	<key>UILaunchScreen</key>
-	<dict/>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-
-	<!-- HealthKit usage descriptions (required by App Store) -->
-	<key>NSHealthShareUsageDescription</key>
-	<string>Challenges reads your Activity rings, steps, and active energy to calculate your competition score. Your data never leaves Apple's servers.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Challenges does not write any health data.</string>
-
-	<!-- Background modes -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
 		<string>processing</string>
 		<string>remote-notification</string>
 	</array>
-
-	<!-- Background task identifiers -->
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
 	<array>
-		<string>com.challenges.sync</string>
-	</array>
-
-	<!-- CloudKit container -->
-	<key>CKContainerIdentifiers</key>
-	<array>
-		<string>iCloud.com.yourname.challenges</string>
-	</array>
-
-	<!-- NSUserActivity types for Siri suggestions, Handoff, and proactive predictions -->
-	<key>NSUserActivityTypes</key>
-	<array>
-		<string>com.challenges.viewChallenge</string>
-		<string>com.challenges.checkRank</string>
-	</array>
-
-	<!-- URL scheme for widget deep links (challenges://challenge/<id>)
-	     and existing invite links (challenges://join/<code>) -->
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>challenges</string>
-			</array>
-			<key>CFBundleURLName</key>
-			<string>com.yourname.challenges</string>
-		</dict>
+		<string>UIInterfaceOrientationPortrait</string>
 	</array>
 </dict>
 </plist>

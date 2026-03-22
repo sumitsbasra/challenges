@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - View Model
 
+@MainActor
 @Observable
 final class JoinChallengeViewModel {
 
@@ -11,10 +12,12 @@ final class JoinChallengeViewModel {
             if upper != code { code = upper }
             if code.count > 6 { code = String(code.prefix(6)) }
             if code.count == 6 { Task { await lookupChallenge() } }
-            if code.count < 6 { previewChallenge = nil; error = nil }
+            if code.count < 6 { previewChallenge = nil; error = nil; alreadyJoined = false }
         }
     }
+    var userID: String? = nil
     var previewChallenge: Challenge? = nil
+    var alreadyJoined = false
     var isLooking = false
     var isJoining = false
     var error: String? = nil
@@ -27,9 +30,18 @@ final class JoinChallengeViewModel {
         guard code.count == 6 else { return }
         isLooking = true
         error = nil
+        alreadyJoined = false
         defer { isLooking = false }
         do {
-            previewChallenge = try await ck.fetchChallenge(inviteCode: code)
+            let challenge = try await ck.fetchChallenge(inviteCode: code)
+            // Check membership immediately so the UI can reflect it at preview time
+            if let uid = userID {
+                let existing = try await ck.fetchParticipations(challengeID: challenge.id)
+                if existing.contains(where: { $0.user.id == uid }) {
+                    alreadyJoined = true
+                }
+            }
+            previewChallenge = challenge
         } catch let e as CloudKitError {
             error = e.localizedDescription
         } catch {
@@ -44,19 +56,26 @@ final class JoinChallengeViewModel {
         error = nil
         defer { isJoining = false }
 
-        let participation = Participation(
-            id: UUID().uuidString,
-            challengeID: challenge.id,
-            user: AppUser(id: userID, displayName: "", appleUserID: "", hasAppleWatch: hasWatch),
-            joinedAt: Date(),
-            status: .active,
-            hasAppleWatch: hasWatch
-        )
         do {
+            // Check if user is already a participant before saving
+            let existing = try await ck.fetchParticipations(challengeID: challenge.id)
+            if existing.contains(where: { $0.user.id == userID }) {
+                error = "You're already in this challenge."
+                return
+            }
+
+            let participation = Participation(
+                id: UUID().uuidString,
+                challengeID: challenge.id,
+                user: AppUser(id: userID, displayName: "", appleUserID: "", hasAppleWatch: hasWatch),
+                joinedAt: Date(),
+                status: .active,
+                hasAppleWatch: hasWatch
+            )
             try await ck.saveParticipation(participation)
             joined = true
         } catch {
-            self.error = error.localizedDescription
+            if self.error == nil { self.error = error.localizedDescription }
         }
     }
 }
@@ -154,7 +173,7 @@ struct JoinChallengeView: View {
                     }
                     HStack {
                         Image(systemName: "person.2").foregroundStyle(.tertiary)
-                        Text("\(challenge.participants.count) of \(challenge.maxParticipants) joined")
+                        Text("\(challenge.participants.count) joined")
                             .font(.subheadline).foregroundStyle(.secondary)
                     }
                 }

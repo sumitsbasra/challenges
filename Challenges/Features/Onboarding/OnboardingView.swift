@@ -94,9 +94,8 @@ struct OnboardingView: View {
         else { return }
 
         Task {
-            // Delegate to AuthManager which does the CK linkage internally.
-            await AuthManager.shared.handleSignInCompletion(credential: credential,
-                                                             session: session)
+            // CK linkage only — session is NOT updated yet so OnboardingView stays visible.
+            await AuthManager.shared.handleSignInCompletion(credential: credential)
             showHealthExplanation = true
         }
     }
@@ -111,7 +110,9 @@ struct OnboardingView: View {
             let hasWatch = await WatchDetector().detectAppleWatch()
             UserDefaults.standard.set(hasWatch, forKey: "hasAppleWatch")
 
-            if var user = session.currentUser {
+            // Now that we know the watch status, complete the user record and
+            // update the session — this triggers ContentView to show MainTabView.
+            if var user = AuthManager.shared.pendingUser {
                 user.hasAppleWatch = hasWatch
                 session.update(user: user)
                 try? await CloudKitManager.shared.saveUser(user)

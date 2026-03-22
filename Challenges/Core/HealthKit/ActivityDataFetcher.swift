@@ -6,7 +6,7 @@ actor ActivityDataFetcher {
 
     private let store: HKHealthStore
 
-    init(store: HKHealthStore = HealthKitManager.shared.store) {
+    init(store: HKHealthStore = HKHealthStore()) {
         self.store = store
     }
 
@@ -16,8 +16,10 @@ actor ActivityDataFetcher {
     func activitySummaries(from startDate: Date, to endDate: Date) async -> [Date: HKActivitySummary] {
         await withCheckedContinuation { continuation in
             let calendar = Calendar.current
-            let start = calendar.dateComponents([.year, .month, .day], from: startDate)
-            let end   = calendar.dateComponents([.year, .month, .day], from: endDate)
+            var start = calendar.dateComponents([.year, .month, .day], from: startDate)
+            start.calendar = calendar
+            var end = calendar.dateComponents([.year, .month, .day], from: endDate)
+            end.calendar = calendar
             let predicate = HKQuery.predicate(forActivitySummariesBetweenStart: start, end: end)
 
             let query = HKActivitySummaryQuery(predicate: predicate) { _, summaries, _ in

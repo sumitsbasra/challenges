@@ -12,6 +12,10 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
     @Published var isSignedIn: Bool = false
     @Published var currentUserID: String? = nil  // CloudKit recordName
 
+    /// Populated after a successful sign-in, before HealthKit permissions are granted.
+    /// OnboardingView reads this to complete the session once permissions are known.
+    private(set) var pendingUser: AppUser?
+
     // Keychain key for the stable Apple user identifier.
     private static let appleUserIDKeychainKey = "com.challenges.appleUserID"
 
@@ -72,57 +76,66 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
     // MARK: - Handle successful credential
 
     /// Called by OnboardingView after a successful SignInWithAppleButton completion.
-    /// Updates the `UserSession` so the root view transitions to the authenticated state.
-    func handleSignInCompletion(credential: ASAuthorizationAppleIDCredential,
-                                session: UserSession) async {
+    /// Performs CloudKit linkage and stores a `pendingUser` but does NOT update
+    /// `UserSession` — that happens in OnboardingView after HealthKit permissions are granted.
+    func handleSignInCompletion(credential: ASAuthorizationAppleIDCredential) async {
         await handleSignIn(credential: credential)
-        // Sync the newly created user into the session so ContentView transitions.
-        if let ckName = currentUserID {
-            let name = UserDefaults.standard.string(forKey: "displayName") ?? "Challenger"
-            let hasWatch = UserDefaults.standard.bool(forKey: "hasAppleWatch")
-            let user = AppUser(id: ckName, displayName: name,
-                               appleUserID: credential.user, hasAppleWatch: hasWatch)
-            await MainActor.run { session.update(user: user) }
-        }
     }
 
     private func handleSignIn(credential: ASAuthorizationAppleIDCredential) async {
         let appleUserID = credential.user
         keychainSave(key: Self.appleUserIDKeychainKey, value: appleUserID)
 
+        // Build display name immediately from credential (only available on first sign-in).
+        let displayName: String
+        if let fullName = credential.fullName,
+           let given = fullName.givenName {
+            let family = fullName.familyName ?? ""
+            displayName = "\(given) \(family)".trimmingCharacters(in: .whitespaces)
+        } else {
+            displayName = UserDefaults.standard.string(forKey: "displayName") ?? "Challenger"
+        }
+        UserDefaults.standard.set(displayName, forKey: "displayName")
+
         do {
             // Fetch CloudKit user record ID (tied to iCloud account).
-            let ckUserRecordID = try await CKContainer(identifier: "iCloud.com.yourname.challenges")
+            let ckUserRecordID = try await CKContainer(identifier: "iCloud.studio.ssb.challenges")
                 .userRecordID()
             let ckRecordName = ckUserRecordID.recordName
             UserDefaults.standard.set(ckRecordName, forKey: "cloudKitUserRecordName")
             currentUserID = ckRecordName
             isSignedIn = true
 
-            // Build display name from credential (only available on first sign-in).
-            let displayName: String
-            if let fullName = credential.fullName,
-               let given = fullName.givenName {
-                let family = fullName.familyName ?? ""
-                displayName = "\(given) \(family)".trimmingCharacters(in: .whitespaces)
-            } else {
-                displayName = UserDefaults.standard.string(forKey: "displayName") ?? "Challenger"
-            }
-            UserDefaults.standard.set(displayName, forKey: "displayName")
-
-            // Upsert User record in CloudKit Public Database.
-            let hasWatch = UserDefaults.standard.bool(forKey: "hasAppleWatch")
+            // Build a pending user immediately so OnboardingView can complete the session
+            // even if the CloudKit save below fails (schema not yet deployed, etc.).
             let user = AppUser(
                 id: ckRecordName,
                 displayName: displayName,
                 appleUserID: appleUserID,
-                hasAppleWatch: hasWatch
+                hasAppleWatch: false
             )
+            pendingUser = user
+
+            // Upsert User record in CloudKit Public Database.
+            // hasAppleWatch is unknown until HealthKit permissions are granted;
+            // OnboardingView will update it and re-save after requesting permissions.
             try await CloudKitManager.shared.saveUser(user)
 
         } catch {
             print("[AuthManager] CloudKit linkage failed: \(error.localizedDescription)")
-            isSignedIn = false
+            // pendingUser may be nil here if CKContainer.userRecordID() itself failed
+            // (e.g. no iCloud account). Fall back to a local-only user so onboarding
+            // can still proceed and HealthKit permissions can still be requested.
+            if pendingUser == nil {
+                let fallbackID = UUID().uuidString
+                pendingUser = AppUser(
+                    id: fallbackID,
+                    displayName: displayName,
+                    appleUserID: appleUserID,
+                    hasAppleWatch: false
+                )
+            }
+            isSignedIn = pendingUser != nil
         }
     }
 

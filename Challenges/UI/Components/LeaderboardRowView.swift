@@ -7,6 +7,7 @@ import SwiftUI
 struct LeaderboardRowView: View {
     let participation: Participation
     let isCurrentUser: Bool
+    var showRank: Bool = true
 
     private var displayName: String { participation.user.displayName }
     private var todayPts: Double {
@@ -17,7 +18,7 @@ struct LeaderboardRowView: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            rankView
+            if showRank { rankView }
             avatarView
             nameStack
             Spacer(minLength: 8)
@@ -25,51 +26,33 @@ struct LeaderboardRowView: View {
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 16)
-        .background(
-            isCurrentUser
-                ? Color.moveRing.opacity(0.07)
-                : Color.clear
-        )
+        .background(Color.clear)
     }
 
     // MARK: - Rank
 
     private var rankView: some View {
-        ZStack {
-            Circle()
-                .fill(rankFillColor)
-                .frame(width: 30, height: 30)
-            Text(rankText)
-                .font(.system(size: 12, weight: .black, design: .rounded))
-                .foregroundStyle(rankTextColor)
+        Group {
+            switch participation.rank {
+            case 1:
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.rankGold)
+            case 2:
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.rankSilver)
+            case 3:
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.rankBronze)
+            default:
+                Text("#\(participation.rank)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
         }
-    }
-
-    private var rankText: String {
-        switch participation.rank {
-        case 1: return "1"
-        case 2: return "2"
-        case 3: return "3"
-        default: return "\(participation.rank)"
-        }
-    }
-
-    private var rankFillColor: Color {
-        switch participation.rank {
-        case 1: return .rankGold
-        case 2: return Color(white: 0.30)
-        case 3: return Color(red: 0.35, green: 0.20, blue: 0.08)
-        default: return Color(white: 0.18)
-        }
-    }
-
-    private var rankTextColor: Color {
-        switch participation.rank {
-        case 1: return .black
-        case 2: return .rankSilver
-        case 3: return .rankBronze
-        default: return Color(white: 0.60)
-        }
+        .frame(width: 30, height: 30)
     }
 
     // MARK: - Avatar
@@ -79,13 +62,22 @@ struct LeaderboardRowView: View {
             .fill(avatarGradient)
             .frame(width: 40, height: 40)
             .overlay {
-                Text(displayName.prefix(1).uppercased())
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                if isCurrentUser,
+                   let data = UserDefaults.standard.data(forKey: "profilePhotoData"),
+                   let img = UIImage(data: data) {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFill()
+                        .clipShape(Circle())
+                } else {
+                    Text(displayName.prefix(1).uppercased())
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
             }
             .overlay(
                 Circle()
-                    .strokeBorder(isCurrentUser ? Color.moveRing.opacity(0.6) : Color.clear,
+                    .strokeBorder(isCurrentUser ? Color.white.opacity(0.35) : Color.clear,
                                   lineWidth: 2)
             )
     }
@@ -111,7 +103,7 @@ struct LeaderboardRowView: View {
             HStack(spacing: 5) {
                 Text(displayName)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isCurrentUser ? Color.moveRing : .primary)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 Image(systemName: participation.hasAppleWatch ? "applewatch" : "iphone")
                     .font(.system(size: 10))
@@ -139,43 +131,4 @@ struct LeaderboardRowView: View {
     }
 }
 
-// MARK: - Points Badge (reusable)
 
-struct RankBadgeView: View {
-    let rank: Int
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(badgeColor)
-            Text("\(rank)")
-                .font(.rankBadge())
-                .foregroundStyle(rank <= 3 ? Color.black : Color.white)
-        }
-    }
-
-    private var badgeColor: Color {
-        switch rank {
-        case 1: return .rankGold
-        case 2: return .rankSilver
-        case 3: return .rankBronze
-        default: return Color(.systemGray4)
-        }
-    }
-}
-
-struct PointsBadgeView: View {
-    let points: Double
-    let label: String
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(Int(points).formatted())
-                .font(.pointsMedium())
-                .foregroundStyle(.primary)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-}

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		54EE9B242F6E503F006D8B83 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 54EE9B232F6E503F006D8B83 /* README.md */; };
 		A1000001 /* ChallengesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001 /* ChallengesApp.swift */; };
 		A1000002 /* AppUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000002 /* AppUser.swift */; };
 		A1000003 /* Challenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000003 /* Challenge.swift */; };
@@ -56,9 +57,18 @@
 		A1000051 /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1000051 /* CloudKit.framework */; };
 		A1000052 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1000052 /* AuthenticationServices.framework */; };
 		A1000053 /* BackgroundTasks.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1000053 /* BackgroundTasks.framework */; };
+		A1000054 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1000054 /* WidgetKit.framework */; };
+		A1000055 /* SpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000055 /* SpotlightIndexer.swift */; };
+		A1000056 /* WidgetDataWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000056 /* WidgetDataWriter.swift */; };
+		A1000057 /* FitnessFormCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000057 /* FitnessFormCard.swift */; };
+		A1000058 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000058 /* TodayView.swift */; };
+		A1000059 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000059 /* HomeView.swift */; };
+		A1000060 /* ChallengeCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000060 /* ChallengeCache.swift */; };
+		A1000061 /* ParticipationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000061 /* ParticipationCache.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		54EE9B232F6E503F006D8B83 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		B1000001 /* ChallengesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengesApp.swift; sourceTree = "<group>"; };
 		B1000002 /* AppUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUser.swift; sourceTree = "<group>"; };
 		B1000003 /* Challenge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Challenge.swift; sourceTree = "<group>"; };
@@ -110,6 +120,14 @@
 		B1000051 /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
 		B1000052 /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		B1000053 /* BackgroundTasks.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = BackgroundTasks.framework; path = System/Library/Frameworks/BackgroundTasks.framework; sourceTree = SDKROOT; };
+		B1000054 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		B1000055 /* SpotlightIndexer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotlightIndexer.swift; sourceTree = "<group>"; };
+		B1000056 /* WidgetDataWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetDataWriter.swift; sourceTree = "<group>"; };
+		B1000057 /* FitnessFormCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FitnessFormCard.swift; sourceTree = "<group>"; };
+		B1000058 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		B1000059 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		B1000060 /* ChallengeCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeCache.swift; sourceTree = "<group>"; };
+		B1000061 /* ParticipationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipationCache.swift; sourceTree = "<group>"; };
 		C0000001 /* Challenges.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Challenges.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -122,13 +140,14 @@
 				A1000051 /* CloudKit.framework in Frameworks */,
 				A1000052 /* AuthenticationServices.framework in Frameworks */,
 				A1000053 /* BackgroundTasks.framework in Frameworks */,
+				A1000054 /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		E0000000 /* root */ = {
+		E0000000 = {
 			isa = PBXGroup;
 			children = (
 				E0000001 /* Challenges */,
@@ -141,6 +160,7 @@
 			isa = PBXGroup;
 			children = (
 				B1000001 /* ChallengesApp.swift */,
+				54EE9B232F6E503F006D8B83 /* README.md */,
 				E0000010 /* Models */,
 				E0000011 /* Scoring */,
 				E0000012 /* Core */,
@@ -149,7 +169,6 @@
 				E0000015 /* Extensions */,
 				E0000016 /* Resources */,
 			);
-			name = Challenges;
 			path = Challenges;
 			sourceTree = "<group>";
 		};
@@ -160,6 +179,7 @@
 				B1000051 /* CloudKit.framework */,
 				B1000052 /* AuthenticationServices.framework */,
 				B1000053 /* BackgroundTasks.framework */,
+				B1000054 /* WidgetKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -201,6 +221,8 @@
 				E0000012B /* CloudKit */,
 				E0000012C /* Auth */,
 				E0000012D /* Sync */,
+				E0000012E /* Intelligence */,
+				E0000012F /* Cache */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -244,6 +266,24 @@
 			path = Sync;
 			sourceTree = "<group>";
 		};
+		E0000012E /* Intelligence */ = {
+			isa = PBXGroup;
+			children = (
+				B1000055 /* SpotlightIndexer.swift */,
+				B1000056 /* WidgetDataWriter.swift */,
+			);
+			path = Intelligence;
+			sourceTree = "<group>";
+		};
+		E0000012F /* Cache */ = {
+			isa = PBXGroup;
+			children = (
+				B1000060 /* ChallengeCache.swift */,
+				B1000061 /* ParticipationCache.swift */,
+			);
+			path = Cache;
+			sourceTree = "<group>";
+		};
 		E0000013 /* UI */ = {
 			isa = PBXGroup;
 			children = (
@@ -270,6 +310,7 @@
 				B1000025 /* PointsBadgeView.swift */,
 				B1000026 /* InviteCodeView.swift */,
 				B1000027 /* EmptyStateView.swift */,
+				B1000057 /* FitnessFormCard.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -277,12 +318,30 @@
 		E0000014 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				E0000014F /* Home */,
+				E0000014E /* Today */,
 				E0000014A /* Onboarding */,
 				E0000014B /* Challenges */,
 				E0000014C /* Detail */,
 				E0000014D /* Profile */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		E0000014F /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				B1000059 /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		E0000014E /* Today */ = {
+			isa = PBXGroup;
+			children = (
+				B1000058 /* TodayView.swift */,
+			);
+			path = Today;
 			sourceTree = "<group>";
 		};
 		E0000014A /* Onboarding */ = {
@@ -375,7 +434,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					F0000001 = {
 						CreatedOnToolsVersion = 15.0;
@@ -405,6 +464,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				54EE9B242F6E503F006D8B83 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -460,6 +520,13 @@
 				A1000043 /* GoalsSettingsView.swift in Sources */,
 				A1000044 /* Date+Competition.swift in Sources */,
 				A1000045 /* Double+Points.swift in Sources */,
+				A1000055 /* SpotlightIndexer.swift in Sources */,
+				A1000056 /* WidgetDataWriter.swift in Sources */,
+				A1000057 /* FitnessFormCard.swift in Sources */,
+				A1000058 /* TodayView.swift in Sources */,
+				A1000059 /* HomeView.swift in Sources */,
+				A1000060 /* ChallengeCache.swift in Sources */,
+				A1000061 /* ParticipationCache.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -473,7 +540,6 @@
 				CODE_SIGN_ENTITLEMENTS = Challenges/Resources/Challenges.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Challenges/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -482,7 +548,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.yourname.challenges";
+				PRODUCT_BUNDLE_IDENTIFIER = studio.ssb.challenges;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.9;
@@ -497,7 +563,6 @@
 				CODE_SIGN_ENTITLEMENTS = Challenges/Resources/Challenges.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Challenges/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -506,7 +571,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.yourname.challenges";
+				PRODUCT_BUNDLE_IDENTIFIER = studio.ssb.challenges;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.9;
@@ -518,6 +583,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -548,8 +614,10 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = JXMDR8ZMM7;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -569,6 +637,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -578,6 +647,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -608,8 +678,10 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = JXMDR8ZMM7;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -621,6 +693,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				VALIDATE_PRODUCT = YES;
@@ -649,7 +722,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = F0000099 /* Project object */;
 }

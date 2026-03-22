@@ -1,84 +1,45 @@
 import SwiftUI
 
-/// Displays a 6-character invite code with individual letter tiles and a copy button.
-/// Styled after the Apple Fitness sharing aesthetics — dark tiles, ring-colored letters.
+/// Compact invite-code display matching the create-challenge screen style.
+/// Shows "INVITE CODE" label, monospaced code text, and a copy button — all in one row.
 struct InviteCodeView: View {
     let code: String
     @State private var copied = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text("INVITE CODE")
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(1.5)
-                .foregroundStyle(.secondary)
-
-            // Letter tiles
-            HStack(spacing: 7) {
-                ForEach(Array(code.enumerated()), id: \.offset) { idx, char in
-                    LetterTile(character: char, colorIndex: idx)
-                }
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("INVITE CODE")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .tracking(0.8)
+                Text(code)
+                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.primary)
             }
 
-            // Copy button
+            Spacer()
+
             Button {
                 UIPasteboard.general.string = code
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) {
-                    copied = true
-                }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) { copied = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     withAnimation { copied = false }
                 }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .font(.caption.weight(.semibold))
-                    Text(copied ? "Copied!" : "Copy Code")
+                    Text(copied ? "Copied" : "Copy")
                         .font(.subheadline.weight(.semibold))
                 }
                 .foregroundStyle(copied ? .exerciseRing : .moveRing)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
                 .background((copied ? Color.exerciseRing : Color.moveRing).opacity(0.14))
                 .clipShape(Capsule())
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 4)
-    }
-}
-
-private struct LetterTile: View {
-    let character: Character
-    let colorIndex: Int
-
-    // Cycle through ring colors across the 6 tiles
-    private var tileColor: Color {
-        let palette: [Color] = [.moveRing, .moveRing, .exerciseRing, .exerciseRing, .standRing, .standRing]
-        return palette[colorIndex % palette.count]
-    }
-
-    var body: some View {
-        Text(String(character))
-            .font(.system(size: 26, weight: .bold, design: .monospaced))
-            .foregroundStyle(tileColor)
-            .frame(width: 42, height: 50)
-            .background(tileColor.opacity(0.10))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(tileColor.opacity(0.22), lineWidth: 1)
-            )
-    }
-}
-
-#Preview {
-    ZStack {
-        Color.black.ignoresSafeArea()
-        InviteCodeView(code: "FX4K9R")
-            .padding(24)
-            .background(Color(UIColor.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 20))
-            .padding()
     }
 }

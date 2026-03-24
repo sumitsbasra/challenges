@@ -14,7 +14,7 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
 
     /// Populated after a successful sign-in, before HealthKit permissions are granted.
     /// OnboardingView reads this to complete the session once permissions are known.
-    private(set) var pendingUser: AppUser?
+    var pendingUser: AppUser?
 
     // Keychain key for the stable Apple user identifier.
     private static let appleUserIDKeychainKey = "com.challenges.appleUserID"
@@ -70,7 +70,9 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
         didCompleteWithError error: Error
     ) {
         // User cancelled or error — remain signed out.
+        #if DEBUG
         print("[AuthManager] Sign in failed: \(error.localizedDescription)")
+        #endif
     }
 
     // MARK: - Handle successful credential
@@ -86,16 +88,19 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
         let appleUserID = credential.user
         keychainSave(key: Self.appleUserIDKeychainKey, value: appleUserID)
 
-        // Build display name immediately from credential (only available on first sign-in).
-        let displayName: String
-        if let fullName = credential.fullName,
-           let given = fullName.givenName {
+        // Apple only provides fullName on the very first sign-in ever.
+        // Subsequent sign-ins (new device, reinstall) have nil fullName.
+        var resolvedName: String? = nil
+        if let fullName = credential.fullName, let given = fullName.givenName {
             let family = fullName.familyName ?? ""
-            displayName = "\(given) \(family)".trimmingCharacters(in: .whitespaces)
-        } else {
-            displayName = UserDefaults.standard.string(forKey: "displayName") ?? "Challenger"
+            resolvedName = "\(given) \(family)".trimmingCharacters(in: .whitespaces)
         }
-        UserDefaults.standard.set(displayName, forKey: "displayName")
+
+        // Final fallback chain: credential → CloudKit → UserDefaults cache → generic
+        // Declared before the do/catch so the catch block can reference it.
+        var displayName = resolvedName
+            ?? UserDefaults.standard.string(forKey: "displayName")
+            ?? "Challenger"
 
         do {
             // Fetch CloudKit user record ID (tied to iCloud account).
@@ -106,6 +111,15 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
             currentUserID = ckRecordName
             isSignedIn = true
 
+            // If Apple didn't give us a name, try to recover it from CloudKit
+            // (covers reinstalls and new devices where the credential has no fullName).
+            if resolvedName == nil {
+                if let existing = try? await CloudKitManager.shared.fetchUser(recordName: ckRecordName) {
+                    resolvedName = existing.displayName
+                    displayName = resolvedName ?? displayName
+                }
+            }
+            UserDefaults.standard.set(displayName, forKey: "displayName")
             // Build a pending user immediately so OnboardingView can complete the session
             // even if the CloudKit save below fails (schema not yet deployed, etc.).
             let user = AppUser(
@@ -122,7 +136,9 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
             try await CloudKitManager.shared.saveUser(user)
 
         } catch {
+            #if DEBUG
             print("[AuthManager] CloudKit linkage failed: \(error.localizedDescription)")
+            #endif
             // pendingUser may be nil here if CKContainer.userRecordID() itself failed
             // (e.g. no iCloud account). Fall back to a local-only user so onboarding
             // can still proceed and HealthKit permissions can still be requested.

@@ -21,9 +21,11 @@ enum SpotlightIndexer {
         guard !items.isEmpty else { return }
 
         CSSearchableIndex.default().indexSearchableItems(items) { error in
+            #if DEBUG
             if let error {
                 print("[SpotlightIndexer] Indexing failed: \(error.localizedDescription)")
             }
+            #endif
         }
     }
 
@@ -34,9 +36,11 @@ enum SpotlightIndexer {
         CSSearchableIndex.default().deleteSearchableItems(
             withDomainIdentifiers: [domainIdentifier]
         ) { error in
+            #if DEBUG
             if let error {
                 print("[SpotlightIndexer] Removal failed: \(error.localizedDescription)")
             }
+            #endif
         }
     }
 

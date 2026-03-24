@@ -6,8 +6,9 @@ struct ChallengeDetailView: View {
     @Environment(UserSession.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var vm: ChallengeDetailViewModel
-    @State private var showDeleteConfirm = false
-    @State private var showLeaveConfirm  = false
+    @State private var showDeleteConfirm  = false
+    @State private var showLeaveConfirm   = false
+    @State private var showEditChallenge  = false
 
     init(challenge: Challenge) {
         self.challenge = challenge
@@ -28,9 +29,11 @@ struct ChallengeDetailView: View {
                         .padding(.top, 24)
                 }
 
-                // 3. Leaderboard
-                leaderboardSection
-                    .padding(.top, 28)
+                // 3. Leaderboard — hidden until challenge starts
+                if challenge.status != .pending {
+                    leaderboardSection
+                        .padding(.top, 28)
+                }
 
                 // 4. Invite code — creator only, pending challenges
                 if challenge.status == .pending,
@@ -43,7 +46,22 @@ struct ChallengeDetailView: View {
             }
         }
         .background(Color.appBackground.ignoresSafeArea())
-        .navigationTitle(challenge.title)
+        .overlay(alignment: .bottom) {
+            if let error = vm.error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.75))
+                    .clipShape(Capsule())
+                    .padding(.bottom, 12)
+                    .onTapGesture { vm.error = nil }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.25), value: vm.error)
+            }
+        }
+        .navigationTitle(vm.challenge.title)
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(Color.appBackground, for: .navigationBar)
         .toolbar {
@@ -62,16 +80,21 @@ struct ChallengeDetailView: View {
                 // … menu
                 Menu {
                     if challenge.creatorID == (session.userID ?? "") {
+                        Button {
+                            showEditChallenge = true
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
                         Button(role: .destructive) {
                             showDeleteConfirm = true
                         } label: {
-                            Label("Delete Challenge", systemImage: "trash")
+                            Label("Delete", systemImage: "trash")
                         }
                     } else {
                         Button(role: .destructive) {
                             showLeaveConfirm = true
                         } label: {
-                            Label("Leave Challenge", systemImage: "rectangle.portrait.and.arrow.right")
+                            Label("Leave", systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     }
                 } label: {
@@ -82,8 +105,12 @@ struct ChallengeDetailView: View {
         .alert("Delete Challenge?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 Task {
-                    try? await vm.deleteChallenge()
-                    dismiss()
+                    do {
+                        try await vm.deleteChallenge()
+                        dismiss()
+                    } catch {
+                        vm.error = "Couldn't delete challenge. Try again."
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -94,11 +121,26 @@ struct ChallengeDetailView: View {
             Button("Leave", role: .destructive) {
                 Task {
                     guard let userID = session.userID else { return }
-                    try? await vm.leaveChallenge(userID: userID)
-                    dismiss()
+                    do {
+                        try await vm.leaveChallenge(userID: userID)
+                        dismiss()
+                    } catch {
+                        vm.error = "Couldn't leave challenge. Try again."
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showEditChallenge) {
+            EditChallengeSheet(challenge: vm.challenge) { title, start, end in
+                Task {
+                    do {
+                        try await vm.update(title: title, startDate: start, endDate: end)
+                    } catch {
+                        vm.error = "Couldn't save changes. Try again."
+                    }
+                }
+            }
         }
         .task { await vm.load() }
         .refreshable { await vm.refresh() }
@@ -128,7 +170,7 @@ struct ChallengeDetailView: View {
     private var statusBanner: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(challenge.startDate.formatted(.dateTime.month(.abbreviated).day())) – \(challenge.endDate.formatted(.dateTime.month(.abbreviated).day()))")
+                Text("\(vm.challenge.startDate.formatted(.dateTime.month(.abbreviated).day())) – \(vm.challenge.endDate.formatted(.dateTime.month(.abbreviated).day()))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -222,6 +264,108 @@ struct ChallengeDetailView: View {
         case .pending:   return .stepsColor
         case .completed: return .secondaryText
         }
+    }
+}
+
+// MARK: - Edit Challenge Sheet
+
+private struct EditChallengeSheet: View {
+    let challenge: Challenge
+    let onSave: (String, Date, Date) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title:     String
+    @State private var startDate: Date
+    @State private var endDate:   Date
+    @FocusState private var titleFocused: Bool
+
+    init(challenge: Challenge, onSave: @escaping (String, Date, Date) -> Void) {
+        self.challenge = challenge
+        self.onSave    = onSave
+        _title     = State(initialValue: challenge.title)
+        _startDate = State(initialValue: challenge.startDate)
+        _endDate   = State(initialValue: challenge.endDate)
+    }
+
+    private var isPending: Bool { challenge.status == .pending }
+    private var canSave:   Bool { !title.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    private var minStart: Date {
+        Calendar.current.startOfDay(
+            for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+    }
+    private var minEnd: Date {
+        Calendar.current.startOfDay(
+            for: Calendar.current.date(byAdding: .day, value: 1, to: startDate)!)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // ── Name ──────────────────────────────────────────────
+                Section("Name") {
+                    TextField("Challenge name", text: $title)
+                        .textInputAutocapitalization(.words)
+                        .focused($titleFocused)
+                }
+
+                // ── Start Date (pending only) ──────────────────────
+                if isPending {
+                    Section("Start Date") {
+                        DatePicker(
+                            "Start",
+                            selection: $startDate,
+                            in: minStart...,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.graphical)
+                        .tint(.moveRing)
+                        .onChange(of: startDate) { _, _ in
+                            if endDate < minEnd { endDate = minEnd }
+                        }
+                    }
+                }
+
+                // ── End Date ──────────────────────────────────────
+                Section(isPending ? "End Date" : "End Date") {
+                    DatePicker(
+                        "End",
+                        selection: $endDate,
+                        in: minEnd...,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .tint(.moveRing)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground)
+            .navigationTitle("Edit Challenge")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        let normStart = Calendar.current.startOfDay(for: startDate)
+                        let normEnd   = NewChallengeViewModel.endOfDay(endDate)
+                        onSave(title, normStart, normEnd)
+                        dismiss()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(canSave ? .moveRing : .secondary)
+                    }
+                    .disabled(!canSave)
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
     }
 }
 

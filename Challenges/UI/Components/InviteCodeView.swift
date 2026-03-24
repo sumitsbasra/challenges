@@ -22,6 +22,7 @@ struct InviteCodeView: View {
 
             Button {
                 UIPasteboard.general.string = code
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) { copied = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     withAnimation { copied = false }

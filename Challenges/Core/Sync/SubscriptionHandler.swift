@@ -47,4 +47,8 @@ enum SubscriptionHandler {
 extension Notification.Name {
     static let dailyScoreDidUpdate    = Notification.Name("DailyScoreDidUpdate")
     static let participationDidChange = Notification.Name("ParticipationDidChange")
+    /// Posted after a successful local rename. userInfo: ["id": String, "title": String]
+    static let challengeDidRename     = Notification.Name("ChallengeDidRename")
+    /// Posted after a successful date update. userInfo: ["id": String, "startDate": Date, "endDate": Date]
+    static let challengeDatesDidChange = Notification.Name("ChallengeDatesDidChange")
 }

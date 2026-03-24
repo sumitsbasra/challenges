@@ -1,6 +1,7 @@
 import SwiftUI
 import BackgroundTasks
 import CoreSpotlight
+import UserNotifications
 
 // MARK: - Shared UI Components
 
@@ -210,6 +211,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         BackgroundTaskScheduler.registerTasks()
+        UNUserNotificationCenter.current().delegate = self
         return true
     }
 
@@ -223,6 +225,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             completionHandler(result)
         }
     }
+
+    /// Handles UNUserNotificationCenter delegate callbacks.
+    // ── UNUserNotificationCenterDelegate ──────────────────────────────────────
+    // (conformance declared in extension below)
 
     /// Handles NSUserActivity continuations from:
     /// - Siri / Apple Intelligence intent invocations (ShowChallengeIntent)
@@ -255,5 +261,35 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             userInfo: ["challengeID": id]
         )
         return true
+    }
+}
+
+// MARK: - UNUserNotificationCenterDelegate
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+
+    /// Show banner + play sound even when the app is foregrounded.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    /// Deep-link into the relevant challenge when the user taps a notification.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if let challengeID = response.notification.request.content.userInfo["challengeID"] as? String {
+            NotificationCenter.default.post(
+                name: .openChallenge,
+                object: nil,
+                userInfo: ["challengeID": challengeID]
+            )
+        }
+        completionHandler()
     }
 }

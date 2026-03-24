@@ -62,9 +62,7 @@ struct LeaderboardRowView: View {
             .fill(avatarGradient)
             .frame(width: 40, height: 40)
             .overlay {
-                if isCurrentUser,
-                   let data = UserDefaults.standard.data(forKey: "profilePhotoData"),
-                   let img = UIImage(data: data) {
+                if let img = cachedAvatar {
                     Image(uiImage: img)
                         .resizable()
                         .scaledToFill()
@@ -75,11 +73,19 @@ struct LeaderboardRowView: View {
                         .foregroundStyle(.white)
                 }
             }
-            .overlay(
-                Circle()
-                    .strokeBorder(isCurrentUser ? Color.white.opacity(0.35) : Color.clear,
-                                  lineWidth: 2)
-            )
+    }
+
+    /// Returns a locally cached UIImage for this participant.
+    /// Current user: read from AvatarCache by userID.
+    /// Others: the avatarURL on AppUser is a CKAsset fileURL — a local temp path.
+    private var cachedAvatar: UIImage? {
+        // Always try AvatarCache first (covers current user + anyone we've cached)
+        if let cached = AvatarCache.load(userID: participation.user.id) { return cached }
+        // Fall back to the CKAsset local file URL (available right after a CloudKit fetch)
+        if let url = participation.user.avatarURL {
+            return UIImage(contentsOfFile: url.path)
+        }
+        return nil
     }
 
     private var avatarGradient: LinearGradient {
@@ -91,7 +97,9 @@ struct LeaderboardRowView: View {
             (Color(red: 1.0, green: 0.2, blue: 0.5), .pink),
             (.teal, Color(red: 0.0, green: 0.8, blue: 0.8)),
         ]
-        let pair = palette[abs(participation.user.id.hashValue) % palette.count]
+        // Use a stable djb2 hash — Swift's hashValue is re-randomised each launch.
+        let stableHash = participation.user.id.utf8.reduce(5381) { ($0 &* 31) &+ Int($1) }
+        let pair = palette[abs(stableHash) % palette.count]
         return LinearGradient(colors: [pair.0, pair.1],
                               startPoint: .topLeading, endPoint: .bottomTrailing)
     }

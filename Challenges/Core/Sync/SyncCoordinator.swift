@@ -19,6 +19,12 @@ actor SyncCoordinator {
 
     // MARK: - Public API
 
+    /// Sync a single challenge — used by the detail view to get fresh scores on open.
+    func syncChallenge(_ challenge: Challenge) async {
+        guard let userID = UserSession.shared.userID else { return }
+        await syncChallenge(challenge, userID: userID)
+    }
+
     /// Sync all active challenges for the current user.
     func syncCurrentChallenges() async {
         guard let userID = UserSession.shared.userID else { return }
@@ -36,7 +42,9 @@ actor SyncCoordinator {
             // Widget state update requires WidgetDataWriter to be added to the app target.
             // await updateWidgetState(userID: userID, activeChallenges: active)
         } catch {
+            #if DEBUG
             print("[SyncCoordinator] Failed to fetch challenges: \(error)")
+            #endif
         }
     }
 
@@ -128,7 +136,9 @@ actor SyncCoordinator {
         do {
             try await ck.saveDailyScores(scores)
         } catch {
+            #if DEBUG
             print("[SyncCoordinator] Failed to save scores for challenge \(challenge.id): \(error)")
+            #endif
         }
     }
 
@@ -144,11 +154,15 @@ actor SyncCoordinator {
             do {
                 if challenge.status == .pending && challenge.startDate <= now {
                     try await ck.updateChallengeStatus(challenge.id, status: .active)
-                } else if challenge.status == .active && challenge.endDate.addingTimeInterval(24 * 3600) < now {
+                } else if challenge.status == .active && challenge.endDate < now {
+                    // endDate is always 23:59:59 on the final day, so this fires at midnight
+                    // after the last day — no arbitrary buffer needed.
                     try await ck.updateChallengeStatus(challenge.id, status: .completed)
                 }
             } catch {
+                #if DEBUG
                 print("[SyncCoordinator] Status transition failed: \(error)")
+                #endif
             }
         }
     }

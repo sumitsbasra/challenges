@@ -13,34 +13,27 @@ final class ProfileViewModel {
     var profilePhoto: UIImage? = nil
 
     private let ck = CloudKitManager.shared
+    private var userID: String = ""
 
     @MainActor
     func load(user: AppUser) {
+        userID = user.id
         displayName = user.displayName
         hasAppleWatch = user.hasAppleWatch
-        loadProfilePhoto()
+        profilePhoto = AvatarCache.load(userID: user.id)
     }
 
-    func loadProfilePhoto() {
-        if let data = UserDefaults.standard.data(forKey: "profilePhotoData"),
-           let image = UIImage(data: data) {
-            profilePhoto = image
-        }
-    }
-
-    func saveProfilePhoto(data: Data) {
-        guard let image = UIImage(data: data) else { return }
-        // Resize longest dimension to 600pt, preserving aspect ratio
-        let maxDimension: CGFloat = 600
-        let scale = maxDimension / max(image.size.width, image.size.height)
-        let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        let resized = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: newSize))
-        }
-        if let jpeg = resized.jpegData(compressionQuality: 0.85) {
-            UserDefaults.standard.set(jpeg, forKey: "profilePhotoData")
-            profilePhoto = resized
+    func saveProfilePhoto(_ image: UIImage) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        AvatarCache.save(image, userID: userID)
+        profilePhoto = image
+        Task {
+            guard var user = UserSession.shared.currentUser else { return }
+            user.avatarURL = AvatarCache.localURL(for: userID)
+            UserSession.shared.update(user: user)
+            let jpegData = image.preparingThumbnail(of: CGSize(width: 400, height: 400))
+                .flatMap { $0.jpegData(compressionQuality: 0.8) }
+            try? await ck.saveUser(user, avatarData: jpegData)
         }
     }
 

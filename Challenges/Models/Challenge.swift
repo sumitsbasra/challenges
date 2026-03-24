@@ -25,6 +25,18 @@ struct Challenge: Identifiable, Codable, Hashable {
         Calendar.current.date(byAdding: .day, value: durationDays - 1, to: startDate)!
     }
 
-    static func == (lhs: Challenge, rhs: Challenge) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    static func == (lhs: Challenge, rhs: Challenge) -> Bool {
+        lhs.id        == rhs.id        &&
+        lhs.title     == rhs.title     &&
+        lhs.startDate == rhs.startDate &&
+        lhs.endDate   == rhs.endDate   &&
+        lhs.status    == rhs.status
+    }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(title)
+        hasher.combine(startDate)
+        hasher.combine(endDate)
+        hasher.combine(status)
+    }
 }

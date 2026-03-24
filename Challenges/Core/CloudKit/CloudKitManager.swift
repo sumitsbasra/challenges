@@ -26,9 +26,18 @@ final class CloudKitManager: ObservableObject {
 
     // MARK: - User
 
-    func saveUser(_ user: AppUser) async throws {
+    func saveUser(_ user: AppUser, avatarData: Data? = nil) async throws {
         let record = RecordMapper.record(from: user)
+        var tmpURL: URL? = nil
+        if let data = avatarData {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(user.id)_avatar.jpg")
+            try data.write(to: url)
+            record["avatarAsset"] = CKAsset(fileURL: url)
+            tmpURL = url
+        }
         _ = try await publicDB.save(record)
+        if let url = tmpURL { try? FileManager.default.removeItem(at: url) }
     }
 
     func fetchUser(recordName: String) async throws -> AppUser? {
@@ -41,6 +50,17 @@ final class CloudKitManager: ObservableObject {
 
     func saveChallenge(_ challenge: Challenge) async throws {
         let record = RecordMapper.record(from: challenge)
+        _ = try await publicDB.save(record)
+    }
+
+    /// Updates a challenge's editable fields in a single round-trip.
+    /// Pass nil for any field you don't want to change.
+    func updateChallenge(id: String, title: String?, startDate: Date?, endDate: Date?) async throws {
+        let recordID = CKRecord.ID(recordName: id)
+        let record = try await publicDB.record(for: recordID)
+        if let title     { record["title"]     = title }
+        if let startDate { record["startDate"] = startDate as CKRecordValue }
+        if let endDate   { record["endDate"]   = endDate   as CKRecordValue }
         _ = try await publicDB.save(record)
     }
 

@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 import UserNotifications
 
 // MARK: - Profile View
@@ -7,7 +6,7 @@ import UserNotifications
 struct ProfileView: View {
     @Environment(UserSession.self) private var session
     @State private var vm = ProfileViewModel()
-    @State private var photoItem: PhotosPickerItem? = nil
+    @State private var showCropPicker = false
 
     var body: some View {
         NavigationStack {
@@ -73,7 +72,9 @@ struct ProfileView: View {
                 // ── About ─────────────────────────────────────────
                 Section("About") {
                     LabeledContent("Version") {
-                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")
+                        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+                        let build   = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+                        Text("\(version) (\(build))")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -105,19 +106,12 @@ struct ProfileView: View {
                 await vm.save(user: user)
             }
         }
-        .onChange(of: photoItem) { _, item in
-            Task {
-                if let data = try? await item?.loadTransferable(type: Data.self) {
-                    vm.saveProfilePhoto(data: data)
-                }
-            }
-        }
     }
 
     // MARK: - Avatar
 
     private var avatarHeader: some View {
-        PhotosPicker(selection: $photoItem, matching: .images) {
+        Button { showCropPicker = true } label: {
             ZStack(alignment: .bottomTrailing) {
                 avatarCircle
                     .frame(width: 110, height: 110)
@@ -134,6 +128,12 @@ struct ProfileView: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 8)
         .padding(.bottom, 16)
+        .sheet(isPresented: $showCropPicker) {
+            ProfileCropPicker { image in
+                vm.saveProfilePhoto(image)
+            }
+            .ignoresSafeArea()
+        }
     }
 
     @ViewBuilder
@@ -163,6 +163,44 @@ struct ProfileView: View {
                         .foregroundStyle(.primary)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Crop Picker (UIImagePickerController with allowsEditing)
+
+import UIKit
+
+private struct ProfileCropPicker: UIViewControllerRepresentable {
+    let onPicked: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = true
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: ProfileCropPicker
+        init(_ parent: ProfileCropPicker) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let img = (info[.editedImage] ?? info[.originalImage]) as? UIImage {
+                parent.onPicked(img)
+            }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }
@@ -267,6 +305,11 @@ struct NotificationSettingsView: View {
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refreshStatus() }
+        // Reschedule whenever any preference changes so the pending queue stays in sync.
+        .onChange(of: challengeStarting) { _, _ in rescheduleFromPrefs() }
+        .onChange(of: dailyUpdate)       { _, _ in rescheduleFromPrefs() }
+        .onChange(of: challengeEnding)   { _, _ in rescheduleFromPrefs() }
+        .onChange(of: finalStandings)    { _, _ in rescheduleFromPrefs() }
         .alert("Notifications Blocked", isPresented: $showDeniedAlert) {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
@@ -341,5 +384,13 @@ struct NotificationSettingsView: View {
     private func refreshStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         authStatus = settings.authorizationStatus
+    }
+
+    /// Re-runs the scheduler using cached challenges so the pending queue immediately
+    /// reflects the user's new toggle state — no CloudKit fetch required.
+    private func rescheduleFromPrefs() {
+        guard let userID = UserSession.shared.userID,
+              let cached = ChallengeCache.load(userID: userID) else { return }
+        Task { await NotificationScheduler.reschedule(for: cached.challenges) }
     }
 }

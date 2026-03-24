@@ -40,17 +40,24 @@ final class ChallengeDetailViewModel {
     }
 
     var countdownText: String {
-        let cal = Calendar.current
+        let cal  = Calendar.current
+        let now  = Date()
         switch challenge.status {
         case .pending:
-            let today = cal.startOfDay(for: Date())
-            let start = cal.startOfDay(for: challenge.startDate)
-            let days = cal.dateComponents([.day], from: today, to: start).day ?? 0
-            return "Starts in \(days) day\(days == 1 ? "" : "s")"
+            let days = cal.dateComponents([.day],
+                from: cal.startOfDay(for: now),
+                to:   cal.startOfDay(for: challenge.startDate)).day ?? 0
+            return days == 0 ? "Starts today" : "Starts in \(days) day\(days == 1 ? "" : "s")"
         case .active:
-            return "\(daysRemaining) day\(daysRemaining == 1 ? "" : "s") left"
+            if cal.isDateInToday(challenge.startDate) { return "Starts today" }
+            if cal.isDateInToday(challenge.endDate)   { return "Ends today" }
+            let daysToEnd = cal.dateComponents([.day],
+                from: cal.startOfDay(for: now),
+                to:   cal.startOfDay(for: challenge.endDate)).day ?? 0
+            if daysToEnd == 1 { return "Ends tomorrow" }
+            return "Ongoing"
         case .completed:
-            return "Challenge complete"
+            return "Completed"
         }
     }
 
@@ -65,6 +72,12 @@ final class ChallengeDetailViewModel {
             isLoading = false
         } else {
             isLoading = true
+        }
+
+        // Sync this challenge's scores first so CloudKit has the latest data
+        // before we fetch — avoids showing stale/zero scores on first open.
+        if challenge.status == .active {
+            await SyncCoordinator.shared.syncChallenge(challenge)
         }
 
         await fetchAndUpdate()
@@ -139,7 +152,7 @@ final class ChallengeDetailViewModel {
             lastFetchDate = Date()
         } catch {
             // Non-fatal — partial data is better than nothing; user can pull-to-refresh.
-            print("[DetailVM] Leaderboard load failed: \(error)")
+            self.error = "Couldn't load leaderboard. Pull down to try again."
         }
     }
 
@@ -152,11 +165,54 @@ final class ChallengeDetailViewModel {
         await loadLeaderboard()
     }
 
+    // MARK: - Edit (title + dates in one round-trip)
+
+    @MainActor
+    func update(title: String, startDate: Date, endDate: Date) async throws {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+
+        let titleChanged = trimmedTitle != challenge.title
+        let startChanged = startDate    != challenge.startDate
+        let endChanged   = endDate      != challenge.endDate
+        guard titleChanged || startChanged || endChanged else { return }
+
+        try await ck.updateChallenge(
+            id:        challenge.id,
+            title:     titleChanged ? trimmedTitle : nil,
+            startDate: startChanged ? startDate    : nil,
+            endDate:   endChanged   ? endDate      : nil
+        )
+
+        // Update local model
+        challenge.title     = trimmedTitle
+        challenge.startDate = startDate
+        challenge.endDate   = endDate
+
+        // Notify list views so their cards update without a CloudKit re-fetch
+        if titleChanged {
+            NotificationCenter.default.post(
+                name: .challengeDidRename,
+                object: nil,
+                userInfo: ["id": challenge.id, "title": trimmedTitle]
+            )
+        }
+        if startChanged || endChanged {
+            NotificationCenter.default.post(
+                name: .challengeDatesDidChange,
+                object: nil,
+                userInfo: ["id": challenge.id, "startDate": startDate, "endDate": endDate]
+            )
+            Task { await NotificationScheduler.remove(challengeID: challenge.id) }
+        }
+    }
+
     // MARK: - Delete / Leave
 
     @MainActor
     func deleteChallenge() async throws {
         try await ck.deleteChallenge(id: challenge.id)
+        await NotificationScheduler.remove(challengeID: challenge.id)
         NotificationCenter.default.post(name: .participationDidChange, object: nil)
     }
 
@@ -164,6 +220,7 @@ final class ChallengeDetailViewModel {
     func leaveChallenge(userID: String) async throws {
         guard let part = participations.first(where: { $0.user.id == userID }) else { return }
         try await ck.leaveChallenge(participationID: part.id)
+        await NotificationScheduler.remove(challengeID: challenge.id)
         NotificationCenter.default.post(name: .participationDidChange, object: nil)
     }
 
@@ -187,7 +244,7 @@ final class ChallengeDetailViewModel {
             }
             lastFetchDate = Date()
         } catch {
-            print("[DetailVM] Score update failed: \(error)")
+            self.error = "Couldn't refresh scores. Pull down to try again."
         }
     }
 }

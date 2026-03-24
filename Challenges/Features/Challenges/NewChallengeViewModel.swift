@@ -6,17 +6,40 @@ import Observation
 final class NewChallengeViewModel {
 
     var title: String = ""
-    var startDate: Date = Calendar.current.date(byAdding: .day, value: 1, to: Date())! {
+
+    // Dates are always normalised: startDate → midnight, endDate → 23:59:59.
+    // This ensures challenges start and end at consistent, predictable times
+    // regardless of when the creator opened the sheet.
+    var startDate: Date = Calendar.current.startOfDay(
+        for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+    ) {
         didSet {
-            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
-            if startDate < tomorrow { startDate = tomorrow }
-            if endDate < startDate { endDate = startDate }
+            startDate = Calendar.current.startOfDay(for: startDate)
+            let tomorrowStart = Calendar.current.startOfDay(
+                for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+            if startDate < tomorrowStart { startDate = tomorrowStart }
+            // end must be at least the day after start
+            let minEnd = NewChallengeViewModel.endOfDay(
+                Calendar.current.date(byAdding: .day, value: 1, to: startDate)!)
+            if endDate < minEnd { endDate = minEnd }
         }
     }
-    var endDate: Date = Calendar.current.date(byAdding: .day, value: 7, to: Date())! {
+    var endDate: Date = NewChallengeViewModel.endOfDay(
+        Calendar.current.date(byAdding: .day, value: 7, to: Date())!
+    ) {
         didSet {
-            if endDate < startDate { endDate = startDate }
+            endDate = NewChallengeViewModel.endOfDay(endDate)
+            let minEnd = NewChallengeViewModel.endOfDay(
+                Calendar.current.date(byAdding: .day, value: 1, to: startDate)!)
+            if endDate < minEnd { endDate = minEnd }
         }
+    }
+
+    /// Returns 23:59:59 on the same calendar day as `date`.
+    static func endOfDay(_ date: Date) -> Date {
+        var comps = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        comps.hour = 23; comps.minute = 59; comps.second = 59
+        return Calendar.current.date(from: comps) ?? date
     }
     var maxParticipants: Int = 50
 
@@ -84,7 +107,9 @@ final class NewChallengeViewModel {
         }
         if let error = lastParticipationError {
             self.error = "Challenge created but auto-join failed: \(error.localizedDescription)"
+            #if DEBUG
             print("[NewChallenge] saveParticipation failed after 3 attempts: \(error)")
+            #endif
         }
 
         createdChallenge = challenge

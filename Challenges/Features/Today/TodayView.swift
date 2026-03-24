@@ -14,6 +14,14 @@ struct TodayItem: Identifiable, Codable {
     var daysRemaining: Int {
         max(0, Calendar.current.dateComponents([.day], from: Date(), to: challenge.endDate).day ?? 0)
     }
+
+    var daysRemainingText: String {
+        let cal = Calendar.current
+        if cal.isDateInToday(challenge.endDate)                       { return "Ends today" }
+        if cal.isDateInTomorrow(challenge.endDate)                    { return "Ends tomorrow" }
+        if cal.isDateInToday(challenge.startDate)                     { return "Starts today" }
+        return "Ongoing"
+    }
 }
 
 // MARK: - ViewModel
@@ -153,7 +161,9 @@ final class TodayViewModel {
             activeItems = items
         } catch {
             // Non-fatal — Challenges tab shows the full list regardless.
+            #if DEBUG
             print("[TodayVM] Failed to load challenges: \(error)")
+            #endif
         }
     }
 }

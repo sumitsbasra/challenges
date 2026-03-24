@@ -1,5 +1,6 @@
 import SwiftUI
 import HealthKit
+import CloudKit
 
 // MARK: - ViewModel
 
@@ -146,8 +147,16 @@ final class HomeViewModel {
             applyAll(all, activeItems: active, completedItems: completed)
             ChallengeCache.save(challenges: all, activeItems: active, userID: userID)
             SpotlightIndexer.index(all)
+            Task { await NotificationScheduler.reschedule(for: all) }
         } catch {
-            self.error = error.localizedDescription
+            let ckError = error as? CKError
+            if ckError?.code == .networkUnavailable || ckError?.code == .networkFailure {
+                self.error = "No internet connection. Showing cached data."
+            } else if ckError?.code == .notAuthenticated {
+                self.error = "iCloud sign-in required. Check Settings → iCloud."
+            } else {
+                self.error = "Couldn't refresh. Pull down to try again."
+            }
         }
     }
 
@@ -158,6 +167,42 @@ final class HomeViewModel {
         self.completedItems  = completedItems
         upcomingChallenges   = all.filter { $0.status == .pending }
         completedChallenges  = all.filter { $0.status == .completed }
+    }
+
+    /// Patches a challenge's title across every in-memory collection — no CloudKit fetch needed.
+    @MainActor
+    func applyRename(id: String, title: String) {
+        func patchChallenge(_ c: inout Challenge) { if c.id == id { c.title = title } }
+        for i in allChallenges.indices       { patchChallenge(&allChallenges[i]) }
+        for i in upcomingChallenges.indices  { patchChallenge(&upcomingChallenges[i]) }
+        for i in completedChallenges.indices { patchChallenge(&completedChallenges[i]) }
+        activeItems    = activeItems.map    { patchItem($0, id: id) { c in c.title = title } }
+        completedItems = completedItems.map { patchItem($0, id: id) { c in c.title = title } }
+    }
+
+    /// Patches a challenge's dates across every in-memory collection — no CloudKit fetch needed.
+    @MainActor
+    func applyDateUpdate(id: String, startDate: Date, endDate: Date) {
+        func patchChallenge(_ c: inout Challenge) {
+            if c.id == id { c.startDate = startDate; c.endDate = endDate }
+        }
+        for i in allChallenges.indices       { patchChallenge(&allChallenges[i]) }
+        for i in upcomingChallenges.indices  { patchChallenge(&upcomingChallenges[i]) }
+        for i in completedChallenges.indices { patchChallenge(&completedChallenges[i]) }
+        activeItems    = activeItems.map    { patchItem($0, id: id) { c in c.startDate = startDate; c.endDate = endDate } }
+        completedItems = completedItems.map { patchItem($0, id: id) { c in c.startDate = startDate; c.endDate = endDate } }
+    }
+
+    /// Returns a new TodayItem with the challenge mutated by `modify`, or the original if IDs don't match.
+    private func patchItem(_ item: TodayItem, id: String, modify: (inout Challenge) -> Void) -> TodayItem {
+        guard item.id == id else { return item }
+        var c = item.challenge
+        modify(&c)
+        return TodayItem(
+            id: item.id, challenge: c, rank: item.rank,
+            participantCount: item.participantCount,
+            todayPoints: item.todayPoints, totalPoints: item.totalPoints
+        )
     }
 
     @MainActor
@@ -202,10 +247,7 @@ struct HomeView: View {
     @State private var showProfile = false
     @State private var showNewChallenge = false
     @State private var newChallengeMode: NewChallengeView.Mode = .create
-    @State private var profilePhoto: UIImage? = {
-        guard let data = UserDefaults.standard.data(forKey: "profilePhotoData") else { return nil }
-        return UIImage(data: data)
-    }()
+    @State private var profilePhoto: UIImage? = nil
 
     private var dateTitle: String {
         Date().formatted(.dateTime.weekday(.wide).month().day())
@@ -220,8 +262,8 @@ struct HomeView: View {
 
                 // Floating action button
                 fab
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 4)
+                    .padding(.trailing, 24)
+                    .padding(.bottom, 0)
             }
             .navigationTitle(dateTitle)
             .navigationBarTitleDisplayMode(.large)
@@ -239,9 +281,7 @@ struct HomeView: View {
             }
         }
         .sheet(isPresented: $showProfile, onDismiss: {
-            if let data = UserDefaults.standard.data(forKey: "profilePhotoData") {
-                profilePhoto = UIImage(data: data)
-            }
+            if let id = session.userID { profilePhoto = AvatarCache.load(userID: id) }
         }) { ProfileView() }
         .sheet(isPresented: $showNewChallenge, onDismiss: {
             Task {
@@ -256,6 +296,7 @@ struct HomeView: View {
         }
         .task {
             guard let userID = session.userID else { return }
+            profilePhoto = AvatarCache.load(userID: userID)
             await vm.load(userID: userID)
             // Kick off background work once data is loaded.
             await SyncCoordinator.shared.syncCurrentChallenges()
@@ -291,6 +332,17 @@ struct HomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openNewChallenge)) { _ in
             showNewChallenge = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .challengeDidRename)) { note in
+            guard let id    = note.userInfo?["id"]    as? String,
+                  let title = note.userInfo?["title"] as? String else { return }
+            vm.applyRename(id: id, title: title)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .challengeDatesDidChange)) { note in
+            guard let id        = note.userInfo?["id"]        as? String,
+                  let startDate = note.userInfo?["startDate"] as? Date,
+                  let endDate   = note.userInfo?["endDate"]   as? Date else { return }
+            vm.applyDateUpdate(id: id, startDate: startDate, endDate: endDate)
+        }
     }
 
     // MARK: - Scroll Content
@@ -301,11 +353,14 @@ struct HomeView: View {
         if !hasChallenges && !vm.isLoadingChallenges {
             // No challenges: fixed layout so empty state centers in remaining space
             VStack(spacing: 0) {
+                if let error = vm.error {
+                    errorBanner(error)
+                }
                 activitySection.padding(.top, 8)
                 EmptyStateView(
                     systemImage: "trophy.fill",
                     title: "No challenges yet",
-                    message: "Invite your friends. Close your rings. Top the leaderboard.",
+                    message: "Invite your friends. Close your rings.\nTop the leaderboard.",
                     actionTitle: "Start a Challenge",
                     action: { showNewChallenge = true }
                 )
@@ -315,6 +370,7 @@ struct HomeView: View {
         } else {
             ScrollView {
                 VStack(spacing: 24) {
+                    if let error = vm.error { errorBanner(error).padding(.horizontal, 16) }
                     activitySection.padding(.top, 8)
                     challengesSection
                     if vm.showCompleted && !vm.completedChallenges.isEmpty {
@@ -324,6 +380,30 @@ struct HomeView: View {
                 .padding(.bottom, 96)
             }
         }
+    }
+
+    // MARK: - Error Banner
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "wifi.slash")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+            Spacer()
+            Button { vm.error = nil } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.orange.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: - Activity Section
@@ -474,17 +554,6 @@ struct HomeView: View {
                 Label("Join with Code", systemImage: "qrcode.viewfinder")
             }
 
-            #if DEBUG
-            Divider()
-
-            Menu("Load Mock Data") {
-                ForEach(MockRingPreset.allCases, id: \.self) { preset in
-                    Button(preset.rawValue) {
-                        vm.loadMockData(ringPreset: preset)
-                    }
-                }
-            }
-            #endif
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 17, weight: .medium))
@@ -518,9 +587,7 @@ private struct ActiveChallengeRow: View {
     let item: TodayItem
 
     var body: some View {
-        HStack(spacing: 14) {
-            rankBadge
-
+        HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.challenge.title)
                     .font(.headline)
@@ -531,29 +598,24 @@ private struct ActiveChallengeRow: View {
                         .foregroundStyle(.secondary)
                     Text("·")
                         .foregroundStyle(.quaternary)
-                    Text("\(item.daysRemaining)d left")
+                    Text(item.daysRemainingText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
+            .padding(.leading, 16)
+            .padding(.vertical, 14)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(Int(item.totalPoints).formatted())
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                Text("pts")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            HStack(spacing: 8) {
+                rankBadge
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.quaternary)
             }
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.quaternary)
+            .padding(.trailing, 16)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
         .background(Color.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
@@ -563,23 +625,22 @@ private struct ActiveChallengeRow: View {
             switch item.rank {
             case 1:
                 Image(systemName: "trophy.fill")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Color.rankGold)
             case 2:
                 Image(systemName: "trophy.fill")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Color.rankSilver)
             case 3:
                 Image(systemName: "trophy.fill")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Color.rankBronze)
             default:
                 Text("#\(item.rank)")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: 44, height: 44)
     }
 }
 
@@ -624,8 +685,11 @@ private struct PendingChallengeRow: View {
     private var rightBadge: some View {
         switch challenge.status {
         case .pending:
-            Image(systemName: "calendar")
-                .font(.system(size: 16, weight: .medium))
+            let days = max(0, Calendar.current.dateComponents(
+                [.day], from: Calendar.current.startOfDay(for: Date()),
+                to: Calendar.current.startOfDay(for: challenge.startDate)).day ?? 0)
+            Text(days == 0 ? "Starts today" : "Starts in \(days) day\(days == 1 ? "" : "s")")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.stepsColor)
         case .completed:
             if let r = rank {

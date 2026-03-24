@@ -24,6 +24,21 @@ struct ChallengesListView: View {
                 } else {
                     challengeList
                 }
+
+                if let error = vm.error {
+                    VStack {
+                        Spacer()
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.black.opacity(0.75))
+                            .clipShape(Capsule())
+                            .padding(.bottom, 12)
+                            .onTapGesture { vm.error = nil }
+                    }
+                }
             }
             .navigationTitle("Challenges")
             .toolbarBackground(Color.appBackground, for: .navigationBar)
@@ -70,6 +85,18 @@ struct ChallengesListView: View {
                 guard let userID = session.userID else { return }
                 await vm.load(userID: userID)
             }
+        }
+        // Apply renames directly to the local array — avoids a stale CloudKit round-trip.
+        .onReceive(NotificationCenter.default.publisher(for: .challengeDidRename)) { note in
+            guard let id    = note.userInfo?["id"]    as? String,
+                  let title = note.userInfo?["title"] as? String else { return }
+            vm.applyRename(id: id, title: title)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .challengeDatesDidChange)) { note in
+            guard let id        = note.userInfo?["id"]        as? String,
+                  let startDate = note.userInfo?["startDate"] as? Date,
+                  let endDate   = note.userInfo?["endDate"]   as? Date else { return }
+            vm.applyDateUpdate(id: id, startDate: startDate, endDate: endDate)
         }
         // Deep-link from intents, Siri, and Spotlight tap-throughs.
         .onReceive(NotificationCenter.default.publisher(for: .openChallenge)) { note in
@@ -163,10 +190,10 @@ private struct ChallengeCardView: View {
                 }
 
                 HStack(spacing: 5) {
-                    Image(systemName: "person.2")
+                    Image(systemName: "clock")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
-                    Text("7 days")
+                    Text(durationLabel)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -181,6 +208,11 @@ private struct ChallengeCardView: View {
         }
         .background(Color.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var durationLabel: String {
+        let days = Calendar.current.dateComponents([.day], from: challenge.startDate, to: challenge.endDate).day ?? 0
+        return "\(days) day\(days == 1 ? "" : "s")"
     }
 
     private var statusColor: Color {

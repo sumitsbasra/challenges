@@ -5,10 +5,11 @@ import SwiftUI
 struct NewChallengeView: View {
     @Environment(UserSession.self) private var session
     @Environment(\.dismiss) private var dismiss
-    @State private var vm     = NewChallengeViewModel()
-    @State private var joinVM = JoinChallengeViewModel()
+    @State private var vm       = NewChallengeViewModel()
+    @State private var joinVM   = JoinChallengeViewModel()
     @State private var mode: Mode
-    @State private var copied = false
+    @State private var copied   = false
+    @State private var createdChallenge: Challenge? = nil
 
     /// Called with the newly created challenge so the caller can update local state immediately
     /// without waiting for CloudKit query propagation.
@@ -26,42 +27,60 @@ struct NewChallengeView: View {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // ── Mode picker ──────────────────────────────
-                        Picker("", selection: $mode) {
-                            Text("Create").tag(Mode.create)
-                            Text("Join").tag(Mode.join)
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.top, 4)
+                if let created = createdChallenge {
+                    ChallengeCreatedView(challenge: created)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .opacity
+                        ))
+                } else {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // ── Mode picker ──────────────────────────────
+                            Picker("", selection: $mode) {
+                                Text("Create").tag(Mode.create)
+                                Text("Join").tag(Mode.join)
+                            }
+                            .pickerStyle(.segmented)
+                            .padding(.top, 4)
 
-                        // ── Content ──────────────────────────────────
-                        if mode == .create {
-                            createContent
-                        } else {
-                            joinContent
+                            // ── Content ──────────────────────────────────
+                            if mode == .create {
+                                createContent
+                            } else {
+                                joinContent
+                            }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 32)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 32)
+                    // Prevent the parent HomeView's .refreshable from bleeding into this sheet
+                    .refreshable {}
+                    .transition(.opacity)
                 }
-                // Prevent the parent HomeView's .refreshable from bleeding into this sheet
-                .refreshable {}
             }
+            .animation(.easeInOut(duration: 0.35), value: createdChallenge == nil)
             .navigationTitle(mode == .create ? "New Challenge" : "Join Challenge")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color.appBackground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                    if createdChallenge == nil {
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if mode == .create {
+                    if createdChallenge != nil {
+                        Button { dismiss() } label: {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.moveRing)
+                        }
+                    } else if mode == .create {
                         if vm.isSaving {
                             ProgressView().tint(.moveRing)
                         } else {
@@ -71,7 +90,8 @@ struct NewChallengeView: View {
                                     await vm.create(creator: user)
                                     if let created = vm.createdChallenge {
                                         onCreated?(created)
-                                        dismiss()
+                                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                        withAnimation { createdChallenge = created }
                                     }
                                 }
                             } label: {
@@ -89,7 +109,10 @@ struct NewChallengeView: View {
                                 Task {
                                     guard let userID = session.userID else { return }
                                     await joinVM.joinChallenge(userID: userID, hasWatch: session.currentUser?.hasAppleWatch ?? false)
-                                    if joinVM.joined { dismiss() }
+                                    if joinVM.joined {
+                                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                        dismiss()
+                                    }
                                 }
                             } label: {
                                 Image(systemName: "checkmark")
@@ -123,19 +146,19 @@ struct NewChallengeView: View {
         // Dates
         FitnessFormCard {
             VStack(spacing: 0) {
-                HStack {
-                    Text("Start Date").foregroundStyle(.primary)
-                    Spacer()
-                    CalendarDatePicker(date: Bindable(vm).startDate)
-                }
+                DatePicker("Start Date", selection: Bindable(vm).startDate,
+                           in: Calendar.current.date(byAdding: .day, value: 1, to: Date())!...,
+                           displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .tint(.moveRing)
 
                 Divider().padding(.vertical, 10)
 
-                HStack {
-                    Text("End Date").foregroundStyle(.primary)
-                    Spacer()
-                    CalendarDatePicker(date: Bindable(vm).endDate)
-                }
+                DatePicker("End Date", selection: Bindable(vm).endDate,
+                           in: Calendar.current.date(byAdding: .day, value: 1, to: Bindable(vm).startDate.wrappedValue)!...,
+                           displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .tint(.moveRing)
 
                 Divider().padding(.vertical, 10)
 
@@ -238,6 +261,70 @@ struct NewChallengeView: View {
 
 }
 
+// MARK: - Challenge Created confirmation screen
+
+private struct ChallengeCreatedView: View {
+    let challenge: Challenge
+
+    @State private var checkVisible = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            // Check mark hero
+            ZStack {
+                Circle()
+                    .fill(Color.exerciseRing.opacity(0.12))
+                    .frame(width: 100, height: 100)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 38, weight: .bold))
+                    .foregroundStyle(Color.exerciseRing)
+                    .scaleEffect(checkVisible ? 1 : 0.3)
+                    .opacity(checkVisible ? 1 : 0)
+                    .animation(.spring(response: 0.45, dampingFraction: 0.6).delay(0.1), value: checkVisible)
+            }
+            .padding(.bottom, 28)
+
+            Text("Challenge Created")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(.primary)
+                .padding(.bottom, 8)
+
+            Text("Share the invite code with friends\nso they can join.")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 36)
+
+            // Invite code card
+            FitnessFormCard {
+                InviteCodeView(code: challenge.inviteCode)
+            }
+            .padding(.horizontal, 16)
+
+            Spacer()
+
+            ShareLink(
+                item: "Join my Challenges fitness challenge! Code: \(challenge.inviteCode)",
+                subject: Text("Join my challenge")
+            ) {
+                Text("Share Invite Code")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.moveRing)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
+        }
+        .onAppear { checkVisible = true }
+    }
+}
+
 // MARK: - Invite Code Input (6 individual boxes)
 
 private struct InviteCodeInputField: View {
@@ -303,43 +390,3 @@ private struct InviteCodeInputField: View {
     }
 }
 
-// MARK: - CalendarDatePicker
-// Wraps UIDatePicker directly to avoid an iOS 26 regression where SwiftUI's
-// DatePicker fails to set `calendar` on the underlying UIDatePicker, causing
-// a crash: "startDateComponents: Date components require a calendar."
-
-import UIKit
-
-private struct CalendarDatePicker: UIViewRepresentable {
-    @Binding var date: Date
-
-    func makeCoordinator() -> Coordinator { Coordinator(date: $date) }
-
-    func makeUIView(context: Context) -> UIDatePicker {
-        let picker = UIDatePicker()
-        picker.datePickerMode = .date
-        picker.preferredDatePickerStyle = .compact
-        picker.calendar = Calendar.current
-        picker.locale   = Locale.current
-        picker.addTarget(
-            context.coordinator,
-            action: #selector(Coordinator.changed(_:)),
-            for: .valueChanged
-        )
-        return picker
-    }
-
-    func updateUIView(_ uiView: UIDatePicker, context: Context) {
-        uiView.calendar = Calendar.current
-        if uiView.date != date { uiView.date = date }
-    }
-
-    final class Coordinator: NSObject {
-        @Binding var date: Date
-        init(date: Binding<Date>) { _date = date }
-
-        @objc func changed(_ sender: UIDatePicker) {
-            date = sender.date
-        }
-    }
-}

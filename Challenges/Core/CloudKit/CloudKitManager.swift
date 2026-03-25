@@ -80,8 +80,10 @@ final class CloudKitManager: ObservableObject {
 
     /// Look up a challenge by its 6-char invite code.
     func fetchChallenge(inviteCode: String) async throws -> Challenge {
-        let predicate = NSPredicate(format: "inviteCode == %@ AND status == %@",
-                                   inviteCode, ChallengeStatus.pending.rawValue)
+        // Search by invite code only — no status filter.
+        // A challenge transitions pending→active once its start date arrives,
+        // so filtering on status="pending" would break joins on/after day 1.
+        let predicate = NSPredicate(format: "inviteCode == %@", inviteCode)
         let query = CKQuery(recordType: RecordMapper.RecordType.challenge, predicate: predicate)
         let (matchResults, _) = try await publicDB.records(matching: query, resultsLimit: 1)
 
@@ -89,6 +91,10 @@ final class CloudKitManager: ObservableObject {
               let record = try? result.get(),
               let challenge = RecordMapper.challenge(from: record) else {
             throw CloudKitError.inviteCodeNotFound
+        }
+        // Completed challenges can't be joined.
+        guard challenge.status != .completed else {
+            throw CloudKitError.challengeAlreadyCompleted
         }
         return challenge
     }
@@ -110,8 +116,13 @@ final class CloudKitManager: ObservableObject {
 
     private func fetchJoinedChallenges(userID: String) async throws -> [Challenge] {
         let userRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: userID), action: .none)
-        let predicate = NSPredicate(format: "userRef == %@ AND status == %@",
-                                   userRef, ParticipationStatus.active.rawValue)
+        // Include invited and active participations — exclude declined only.
+        // Filtering only on "active" caused challenges to vanish from the home feed
+        // for participants who were invited but hadn't accepted yet.
+        let nonDeclinedStatuses = [ParticipationStatus.active.rawValue,
+                                   ParticipationStatus.invited.rawValue]
+        let predicate = NSPredicate(format: "userRef == %@ AND status IN %@",
+                                   userRef, nonDeclinedStatuses)
         let query = CKQuery(recordType: RecordMapper.RecordType.participation, predicate: predicate)
 
         let challengeIDs = try await fetchAllRecords(matching: query).compactMap { record -> String? in
@@ -301,8 +312,18 @@ final class CloudKitManager: ObservableObject {
         )
         scoreSubscription.notificationInfo = makeNotificationInfo()
 
-        // Subscription 2: Participation changes for the current user
-        let currentUserID = (try? await fetchCurrentUserRecordID().recordName) ?? ""
+        // Subscription 2: Participation changes for the current user.
+        // If we can't resolve the current user ID, abort rather than poisoning
+        // the subscription predicate with an empty string.
+        let currentUserID: String
+        do {
+            currentUserID = try await fetchCurrentUserRecordID().recordName
+        } catch {
+            #if DEBUG
+            print("[CloudKitManager] registerSubscriptions: failed to fetch current user ID — \(error). Skipping participation subscription.")
+            #endif
+            return
+        }
         let userRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: currentUserID), action: .none)
         let participationPredicate = NSPredicate(format: "userRef == %@", userRef)
         let participationSubscription = CKQuerySubscription(
@@ -313,12 +334,56 @@ final class CloudKitManager: ObservableObject {
         )
         participationSubscription.notificationInfo = makeNotificationInfo()
 
+        await registerSubscriptionsWithRetry(
+            subscriptions: [scoreSubscription, participationSubscription],
+            attempt: 1
+        )
+    }
+
+    private func registerSubscriptionsWithRetry(subscriptions: [CKSubscription], attempt: Int) async {
+        let maxAttempts = 3
         let operation = CKModifySubscriptionsOperation(
-            subscriptionsToSave: [scoreSubscription, participationSubscription],
+            subscriptionsToSave: subscriptions,
             subscriptionIDsToDelete: nil
         )
         operation.qualityOfService = .utility
-        publicDB.add(operation)
+
+        do {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                operation.modifySubscriptionsResultBlock = { result in
+                    switch result {
+                    case .success:
+                        cont.resume()
+                    case .failure(let error):
+                        cont.resume(throwing: error)
+                    }
+                }
+                publicDB.add(operation)
+            }
+        } catch {
+            let ckError = error as? CKError
+            let retryDelay = ckError?.retryAfterSeconds ?? 5.0
+            let isRetryable = ckError?.code == .networkUnavailable
+                || ckError?.code == .networkFailure
+                || ckError?.code == .serviceUnavailable
+                || ckError?.code == .requestRateLimited
+
+            #if DEBUG
+            print("[CloudKitManager] registerSubscriptions attempt \(attempt) failed: \(error)")
+            #endif
+
+            if isRetryable && attempt < maxAttempts {
+                #if DEBUG
+                print("[CloudKitManager] Retrying subscription registration in \(retryDelay)s (attempt \(attempt + 1)/\(maxAttempts))")
+                #endif
+                try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                await registerSubscriptionsWithRetry(subscriptions: subscriptions, attempt: attempt + 1)
+            } else {
+                #if DEBUG
+                print("[CloudKitManager] registerSubscriptions failed after \(attempt) attempt(s): \(error)")
+                #endif
+            }
+        }
     }
 
     private func makeNotificationInfo() -> CKSubscription.NotificationInfo {

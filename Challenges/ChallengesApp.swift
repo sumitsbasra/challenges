@@ -237,7 +237,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// - Handoff from other devices
     ///
     /// All paths resolve to the same `openChallenge` notification, which
-    /// ChallengesListView observes to navigate programmatically.
+    /// HomeView observes to navigate programmatically.
     func application(
         _ application: UIApplication,
         continue userActivity: NSUserActivity,

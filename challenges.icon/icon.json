@@ -19,6 +19,7 @@
     {
       "layers" : [
         {
+          "glass" : false,
           "image-name" : "challenges_v3 2.png",
           "name" : "challenges_v3 2",
           "position" : {

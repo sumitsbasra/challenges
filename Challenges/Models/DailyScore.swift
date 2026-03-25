@@ -28,6 +28,12 @@ struct DailyScore: Identifiable, Codable {
         noonComponents.hour = 12
         noonComponents.minute = 0
         noonComponents.second = 0
-        return cal.date(from: noonComponents)!
+        guard let noon = cal.date(from: noonComponents) else {
+            #if DEBUG
+            print("[DailyScore] noonUTC(for:) failed to compute noon for \(date) — falling back to input date")
+            #endif
+            return date
+        }
+        return noon
     }
 }

@@ -20,15 +20,26 @@ enum RecordMapper {
             let displayName = record["displayName"] as? String,
             let appleUserID = record["appleUserID"] as? String,
             let hasWatch    = record["hasAppleWatch"] as? Int
-        else { return nil }
+        else {
+            #if DEBUG
+            print("[RecordMapper] user(from:) failed — record \(record.recordID.recordName), fields: \(record.allKeys())")
+            #endif
+            return nil
+        }
 
+        let userID = record.recordID.recordName
         var avatarURL: URL? = nil
-        if let asset = record["avatarAsset"] as? CKAsset {
-            avatarURL = asset.fileURL
+        if let asset = record["avatarAsset"] as? CKAsset,
+           let tmpURL = asset.fileURL,
+           let data = try? Data(contentsOf: tmpURL) {
+            // Copy from CloudKit's temp directory to our Documents cache so it
+            // survives app restarts and iOS temp-file purges.
+            AvatarCache.cache(data: data, userID: userID)
+            avatarURL = AvatarCache.localURL(for: userID)
         }
 
         return AppUser(
-            id: record.recordID.recordName,
+            id: userID,
             displayName: displayName,
             appleUserID: appleUserID,
             hasAppleWatch: hasWatch == 1,
@@ -57,7 +68,12 @@ enum RecordMapper {
             let status     = ChallengeStatus(rawValue: statusStr),
             let inviteCode = record["inviteCode"] as? String,
             let createdAt  = record["createdAt"] as? Date
-        else { return nil }
+        else {
+            #if DEBUG
+            print("[RecordMapper] challenge(from:) failed — record \(record.recordID.recordName), fields: \(record.allKeys())")
+            #endif
+            return nil
+        }
 
         let maxParticipants = record["maxParticipants"] as? Int ?? 20
         return Challenge(
@@ -97,7 +113,12 @@ enum RecordMapper {
             let statusStr    = record["status"] as? String,
             let status       = ParticipationStatus(rawValue: statusStr),
             let hasWatch     = record["hasAppleWatch"] as? Int
-        else { return nil }
+        else {
+            #if DEBUG
+            print("[RecordMapper] participation(from:) failed — record \(record.recordID.recordName), fields: \(record.allKeys())")
+            #endif
+            return nil
+        }
 
         return Participation(
             id: record.recordID.recordName,
@@ -132,7 +153,12 @@ enum RecordMapper {
             let points           = record["points"] as? Double,
             let syncSourceStr    = record["syncSource"] as? String,
             let syncSource       = SyncSource(rawValue: syncSourceStr)
-        else { return nil }
+        else {
+            #if DEBUG
+            print("[RecordMapper] dailyScore(from:) failed — record \(record.recordID.recordName), fields: \(record.allKeys())")
+            #endif
+            return nil
+        }
 
         let ringData = RingData(
             moveRingPct:     record["moveRingPct"]     as? Double ?? 0,

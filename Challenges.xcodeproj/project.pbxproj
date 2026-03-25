@@ -38,8 +38,6 @@
 		A1000026 /* InviteCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000026 /* InviteCodeView.swift */; };
 		A1000027 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000027 /* EmptyStateView.swift */; };
 		A1000028 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000028 /* OnboardingView.swift */; };
-		A1000030 /* ChallengesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000030 /* ChallengesListView.swift */; };
-		A1000031 /* ChallengesListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000031 /* ChallengesListViewModel.swift */; };
 		A1000032 /* NewChallengeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000032 /* NewChallengeView.swift */; };
 		A1000033 /* NewChallengeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000033 /* NewChallengeViewModel.swift */; };
 		A1000034 /* JoinChallengeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000034 /* JoinChallengeView.swift */; };
@@ -101,8 +99,6 @@
 		B1000026 /* InviteCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteCodeView.swift; sourceTree = "<group>"; };
 		B1000027 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		B1000028 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
-		B1000030 /* ChallengesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengesListView.swift; sourceTree = "<group>"; };
-		B1000031 /* ChallengesListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengesListViewModel.swift; sourceTree = "<group>"; };
 		B1000032 /* NewChallengeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewChallengeView.swift; sourceTree = "<group>"; };
 		B1000033 /* NewChallengeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewChallengeViewModel.swift; sourceTree = "<group>"; };
 		B1000034 /* JoinChallengeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinChallengeView.swift; sourceTree = "<group>"; };
@@ -354,8 +350,6 @@
 		E0000014B /* Challenges */ = {
 			isa = PBXGroup;
 			children = (
-				B1000030 /* ChallengesListView.swift */,
-				B1000031 /* ChallengesListViewModel.swift */,
 				B1000032 /* NewChallengeView.swift */,
 				B1000033 /* NewChallengeViewModel.swift */,
 				B1000034 /* JoinChallengeView.swift */,
@@ -519,8 +513,6 @@
 				A1000026 /* InviteCodeView.swift in Sources */,
 				A1000027 /* EmptyStateView.swift in Sources */,
 				A1000028 /* OnboardingView.swift in Sources */,
-				A1000030 /* ChallengesListView.swift in Sources */,
-				A1000031 /* ChallengesListViewModel.swift in Sources */,
 				A1000032 /* NewChallengeView.swift in Sources */,
 				A1000033 /* NewChallengeViewModel.swift in Sources */,
 				A1000034 /* JoinChallengeView.swift in Sources */,

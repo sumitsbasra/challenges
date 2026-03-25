@@ -17,8 +17,11 @@ struct NewChallengeView: View {
 
     enum Mode { case create, join }
 
-    init(mode: Mode = .create, onCreated: ((Challenge) -> Void)? = nil) {
+    private let prefillCode: String
+
+    init(mode: Mode = .create, prefillCode: String = "", onCreated: ((Challenge) -> Void)? = nil) {
         _mode = State(initialValue: mode)
+        self.prefillCode = prefillCode
         self.onCreated = onCreated
     }
 
@@ -224,7 +227,10 @@ struct NewChallengeView: View {
         // 6-box OTP code input
         InviteCodeInputField(code: Bindable(joinVM).code)
             .frame(maxWidth: .infinity)
-            .onAppear { joinVM.userID = session.userID }
+            .onAppear {
+                joinVM.userID = session.userID
+                if !prefillCode.isEmpty { joinVM.code = prefillCode }
+            }
 
         if joinVM.isLooking {
             ProgressView("Finding challenge…")

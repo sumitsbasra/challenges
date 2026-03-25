@@ -7,6 +7,7 @@ enum CloudKitError: LocalizedError {
     case saveFailed(CKError)
     case fetchFailed(CKError)
     case inviteCodeNotFound
+    case challengeAlreadyCompleted
     case challengeFull
     case alreadyParticipating
     case unknown(Error)
@@ -23,6 +24,8 @@ enum CloudKitError: LocalizedError {
             return "Failed to fetch: \(error.localizedDescription)"
         case .inviteCodeNotFound:
             return "No challenge found with that invite code. Check the code and try again."
+        case .challengeAlreadyCompleted:
+            return "This challenge has already ended and can't be joined."
         case .challengeFull:
             return "This challenge is full."
         case .alreadyParticipating:

@@ -1,5 +1,6 @@
 import SwiftUI
 import Intents
+import Charts
 
 struct ChallengeDetailView: View {
     let challenge: Challenge
@@ -29,8 +30,20 @@ struct ChallengeDetailView: View {
                         .padding(.top, 24)
                 }
 
-                // 3. Leaderboard — hidden until challenge starts
-                if challenge.status != .pending {
+                // 3. Score history chart — active challenges with data
+                if challenge.status == .active,
+                   let me = vm.currentUserParticipation,
+                   !me.dailyScores.isEmpty {
+                    ScoreHistoryChart(participation: me, challenge: challenge)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                }
+
+                // 4. Results/Leaderboard — hidden until challenge starts
+                if challenge.status == .completed {
+                    PodiumSection(participations: vm.rankedParticipations, userID: session.userID)
+                        .padding(.top, 28)
+                } else if challenge.status == .active {
                     leaderboardSection
                         .padding(.top, 28)
                 }
@@ -212,11 +225,18 @@ struct ChallengeDetailView: View {
                     ProgressView()
                         .padding(32)
                 } else if vm.rankedParticipations.isEmpty {
-                    Text("No participants yet.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(32)
-                        .frame(maxWidth: .infinity)
+                    VStack(spacing: 6) {
+                        Text(challenge.status == .active ? "No participants yet." : "Waiting for participants.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        if challenge.status == .pending {
+                            Text("Share your invite code to get people in.")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .padding(32)
+                    .frame(maxWidth: .infinity)
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(vm.rankedParticipations.enumerated()), id: \.element.id) { idx, p in
@@ -366,6 +386,169 @@ private struct EditChallengeSheet: View {
             }
         }
         .presentationDragIndicator(.visible)
+    }
+}
+
+// MARK: - Podium (Completed Challenges)
+
+private struct PodiumSection: View {
+    let participations: [Participation]
+    let userID: String?
+
+    private var top3: [Participation] { Array(participations.prefix(3)) }
+    private var rest: [Participation] { Array(participations.dropFirst(3)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            FitnessSectionHeader(title: "Final Results")
+                .padding(.horizontal, 20)
+
+            VStack(spacing: 12) {
+                // Podium display — gold/silver/bronze side by side
+                if !top3.isEmpty {
+                    HStack(alignment: .bottom, spacing: 12) {
+                        // Silver (2nd) — left
+                        if top3.count > 1 {
+                            PodiumPillar(participation: top3[1], rank: 2,
+                                         height: 72, isCurrentUser: top3[1].user.id == userID)
+                        }
+                        // Gold (1st) — center, taller
+                        PodiumPillar(participation: top3[0], rank: 1,
+                                     height: 96, isCurrentUser: top3[0].user.id == userID)
+                        // Bronze (3rd) — right
+                        if top3.count > 2 {
+                            PodiumPillar(participation: top3[2], rank: 3,
+                                         height: 60, isCurrentUser: top3[2].user.id == userID)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                // 4th place and beyond
+                if !rest.isEmpty {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.cardBackground)
+                        VStack(spacing: 0) {
+                            ForEach(Array(rest.enumerated()), id: \.element.id) { idx, p in
+                                LeaderboardRowView(
+                                    participation: p,
+                                    isCurrentUser: p.user.id == userID,
+                                    showRank: true
+                                )
+                                if idx < rest.count - 1 {
+                                    Divider().padding(.horizontal, 16)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+        }
+    }
+}
+
+private struct PodiumPillar: View {
+    let participation: Participation
+    let rank: Int
+    let height: CGFloat
+    let isCurrentUser: Bool
+
+    private var rankColor: Color {
+        switch rank {
+        case 1: return .rankGold
+        case 2: return .rankSilver
+        default: return .rankBronze
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            // Name
+            Text(participation.user.displayName)
+                .font(.system(size: 11, weight: isCurrentUser ? .bold : .regular))
+                .foregroundStyle(isCurrentUser ? .primary : .secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            // Points
+            Text("\(Int(participation.totalPoints))")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(rankColor)
+
+            // Trophy icon
+            Image(systemName: "trophy.fill")
+                .font(.system(size: rank == 1 ? 22 : 16))
+                .foregroundStyle(rankColor)
+
+            // Pillar
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(rankColor.opacity(0.18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(rankColor.opacity(isCurrentUser ? 0.5 : 0.2), lineWidth: 1)
+                )
+                .frame(height: height)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Score History Chart
+
+private struct ScoreHistoryChart: View {
+    let participation: Participation
+    let challenge: Challenge
+
+    private var scores: [DailyScore] {
+        participation.dailyScores.sorted { $0.date < $1.date }
+    }
+
+    private var today: Date { Calendar.current.startOfDay(for: Date()) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            FitnessSectionHeader(title: "My Points")
+
+            Chart(scores, id: \.id) { score in
+                let day = Calendar.current.startOfDay(for: score.date)
+                BarMark(
+                    x: .value("Day", day, unit: .day),
+                    y: .value("Points", score.points)
+                )
+                .foregroundStyle(
+                    day == today
+                        ? Color.moveRing
+                        : Color.moveRing.opacity(0.45)
+                )
+                .cornerRadius(4)
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day)) { value in
+                    if let date = value.as(Date.self) {
+                        let label = date.formatted(.dateTime.day())
+                        AxisValueLabel(label)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.secondary)
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                    AxisValueLabel()
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.secondary)
+                    AxisGridLine().foregroundStyle(Color.white.opacity(0.07))
+                }
+            }
+            .chartXScale(domain: challenge.startDate...challenge.endDate)
+            .frame(height: 100)
+        }
+        .padding(16)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 

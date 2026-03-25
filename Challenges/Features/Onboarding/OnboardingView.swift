@@ -1,6 +1,7 @@
 import SwiftUI
 import AuthenticationServices
 import UIKit
+import UserNotifications
 
 struct OnboardingView: View {
     @Environment(UserSession.self) private var session
@@ -256,6 +257,8 @@ struct OnboardingView: View {
     }
 
     private func startWelcomeRings() {
+        // Ask for notification permission now that the user has completed onboarding setup.
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in }
         // Snap to zero without any animation (suppresses implicit spring on the overlay)
         var t = Transaction()
         t.disablesAnimations = true

@@ -103,15 +103,14 @@ struct MyProgressView: View {
     // MARK: - Footer
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 0) {
             PointsFooterCell(value: todayScore?.points ?? 0, label: "Today")
-            Spacer()
+                .frame(maxWidth: .infinity)
             Color.fitnessSeparator
                 .frame(width: 0.5, height: 30)
-            Spacer()
             PointsFooterCell(value: participation.totalPoints, label: "Total")
+                .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 28)
         .padding(.vertical, 14)
     }
 

@@ -9,7 +9,11 @@ enum ScoreAggregator {
             participations[i].totalPoints = participations[i].dailyScores
                 .reduce(0) { $0 + $1.points }
         }
-        participations.sort { $0.totalPoints > $1.totalPoints }
+        participations.sort {
+            if $0.totalPoints != $1.totalPoints { return $0.totalPoints > $1.totalPoints }
+            if $0.joinedAt != $1.joinedAt { return $0.joinedAt < $1.joinedAt }
+            return $0.user.id < $1.user.id
+        }
         for i in participations.indices {
             participations[i].rank = i + 1
         }

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import CloudKit
 
 @MainActor
 @Observable
@@ -116,7 +117,12 @@ final class ChallengeDetailViewModel {
             lastFetchDate = Date()
             ParticipationCache.save(parts, challengeID: challenge.id)
         } catch {
-            self.error = error.localizedDescription
+            let ck = error as? CKError
+            if ck?.code == .networkUnavailable || ck?.code == .networkFailure {
+                if participations.isEmpty { self.error = "No internet connection." }
+            } else {
+                self.error = "Couldn't load. Pull down to try again."
+            }
         }
     }
 

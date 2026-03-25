@@ -243,11 +243,14 @@ final class HomeViewModel {
 struct HomeView: View {
     @Environment(UserSession.self) private var session
     @State private var vm = HomeViewModel()
-    @State private var navigationPath = NavigationPath()
+    @State private var navigationPath: [String] = []
     @State private var showProfile = false
     @State private var showNewChallenge = false
     @State private var newChallengeMode: NewChallengeView.Mode = .create
+    @State private var newChallengePrefillCode = ""
     @State private var profilePhoto: UIImage? = nil
+    /// Holds a deep-link challenge ID that arrived before challenges finished loading.
+    @State private var pendingDeepLinkChallengeID: String? = nil
 
     private var dateTitle: String {
         Date().formatted(.dateTime.weekday(.wide).month().day())
@@ -276,8 +279,10 @@ struct HomeView: View {
                     moreMenu
                 }
             }
-            .navigationDestination(for: Challenge.self) { challenge in
-                ChallengeDetailView(challenge: challenge)
+            .navigationDestination(for: String.self) { id in
+                if let challenge = vm.allChallenges.first(where: { $0.id == id }) {
+                    ChallengeDetailView(challenge: challenge)
+                }
             }
         }
         .sheet(isPresented: $showProfile, onDismiss: {
@@ -289,7 +294,7 @@ struct HomeView: View {
                 await vm.loadChallenges(userID: userID)
             }
         }) {
-            NewChallengeView(mode: newChallengeMode) { created in
+            NewChallengeView(mode: newChallengeMode, prefillCode: newChallengePrefillCode) { created in
                 vm.upcomingChallenges.insert(created, at: 0)
                 vm.allChallenges.insert(created, at: 0)
             }
@@ -301,6 +306,7 @@ struct HomeView: View {
             // Kick off background work once data is loaded.
             await SyncCoordinator.shared.syncCurrentChallenges()
             BackgroundTaskScheduler.scheduleAppRefresh()
+            Task { await NotificationScheduler.reschedule(for: vm.allChallenges) }
             let activeIDs = vm.allChallenges.filter { $0.status == .active }.map { $0.id }
             await CloudKitManager.shared.registerSubscriptions(forActiveChallengeIDs: activeIDs)
         }
@@ -308,15 +314,21 @@ struct HomeView: View {
             guard let userID = session.userID else { return }
             await vm.load(userID: userID)
         }
+        .tint(.white)
         .onOpenURL { url in
-            guard url.scheme == "challenges",
-                  url.host == "challenge",
-                  let challengeID = url.pathComponents.dropFirst().first
-            else { return }
-            NotificationCenter.default.post(
-                name: .openChallenge, object: nil,
-                userInfo: ["challengeID": challengeID]
-            )
+            guard url.scheme == "challenges" else { return }
+            if url.host == "challenge",
+               let challengeID = url.pathComponents.dropFirst().first {
+                NotificationCenter.default.post(
+                    name: .openChallenge, object: nil,
+                    userInfo: ["challengeID": challengeID]
+                )
+            } else if url.host == "join",
+                      let code = url.pathComponents.dropFirst().first {
+                newChallengeMode = .join
+                newChallengePrefillCode = code.uppercased()
+                showNewChallenge = true
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .participationDidChange)) { _ in
             Task {
@@ -325,9 +337,19 @@ struct HomeView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openChallenge)) { note in
-            guard let id = note.userInfo?["challengeID"] as? String,
-                  let match = vm.allChallenges.first(where: { $0.id == id }) else { return }
-            navigationPath.append(match)
+            guard let id = note.userInfo?["challengeID"] as? String else { return }
+            if vm.allChallenges.contains(where: { $0.id == id }) {
+                navigationPath.append(id)
+            } else {
+                // Challenges haven't loaded yet — store and navigate once they arrive.
+                pendingDeepLinkChallengeID = id
+            }
+        }
+        .onChange(of: vm.allChallenges) { _, challenges in
+            guard let id = pendingDeepLinkChallengeID,
+                  challenges.contains(where: { $0.id == id }) else { return }
+            pendingDeepLinkChallengeID = nil
+            navigationPath.append(id)
         }
         .onReceive(NotificationCenter.default.publisher(for: .openNewChallenge)) { _ in
             showNewChallenge = true
@@ -475,13 +497,13 @@ struct HomeView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(vm.activeItems) { item in
-                        NavigationLink(value: item.challenge) {
+                        NavigationLink(value: item.challenge.id) {
                             ActiveChallengeRow(item: item)
                         }
                         .buttonStyle(.plain)
                     }
                     ForEach(vm.upcomingChallenges) { challenge in
-                        NavigationLink(value: challenge) {
+                        NavigationLink(value: challenge.id) {
                             PendingChallengeRow(challenge: challenge)
                         }
                         .buttonStyle(.plain)
@@ -503,7 +525,7 @@ struct HomeView: View {
             VStack(spacing: 10) {
                 ForEach(vm.completedChallenges) { challenge in
                     let rank = vm.completedItems.first(where: { $0.id == challenge.id })?.rank
-                    NavigationLink(value: challenge) {
+                    NavigationLink(value: challenge.id) {
                         PendingChallengeRow(challenge: challenge, rank: rank, dimmed: true)
                     }
                     .buttonStyle(.plain)

@@ -68,7 +68,13 @@ actor SyncCoordinator {
         var day = startDay
         while day <= endDay {
             days.append(day)
-            day = calendar.date(byAdding: .day, value: 1, to: day)!
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
+                #if DEBUG
+                print("[SyncCoordinator] date(byAdding:) returned nil for \(day) — stopping day enumeration")
+                #endif
+                break
+            }
+            day = nextDay
         }
 
         // Fetch activity data and compute scores concurrently per day.
@@ -151,18 +157,34 @@ actor SyncCoordinator {
         let ck = await MainActor.run { CloudKitManager.shared }
         let now = Date()
         for challenge in challenges {
+            if challenge.status == .pending && challenge.startDate <= now {
+                await transitionStatus(of: challenge, to: .active, ck: ck)
+            } else if challenge.status == .active && challenge.endDate < now {
+                // endDate is always 23:59:59 on the final day, so this fires at midnight
+                // after the last day — no arbitrary buffer needed.
+                await transitionStatus(of: challenge, to: .completed, ck: ck)
+            }
+        }
+    }
+
+    private func transitionStatus(of challenge: Challenge, to status: ChallengeStatus,
+                                  ck: CloudKitManager) async {
+        let maxRetries = 2
+        for attempt in 1...maxRetries + 1 {
             do {
-                if challenge.status == .pending && challenge.startDate <= now {
-                    try await ck.updateChallengeStatus(challenge.id, status: .active)
-                } else if challenge.status == .active && challenge.endDate < now {
-                    // endDate is always 23:59:59 on the final day, so this fires at midnight
-                    // after the last day — no arbitrary buffer needed.
-                    try await ck.updateChallengeStatus(challenge.id, status: .completed)
-                }
+                try await ck.updateChallengeStatus(challenge.id, status: status)
+                return
             } catch {
                 #if DEBUG
-                print("[SyncCoordinator] Status transition failed: \(error)")
+                print("[SyncCoordinator] Status transition \(challenge.id) → \(status) failed (attempt \(attempt)): \(error)")
                 #endif
+                if attempt <= maxRetries {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                } else {
+                    #if DEBUG
+                    print("[SyncCoordinator] Status transition \(challenge.id) → \(status) failed after \(maxRetries + 1) attempts — giving up.")
+                    #endif
+                }
             }
         }
     }

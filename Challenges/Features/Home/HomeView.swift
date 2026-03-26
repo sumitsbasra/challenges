@@ -148,10 +148,13 @@ final class HomeViewModel {
             // Immediately transition any challenges whose window has opened or closed,
             // and fire CloudKit updates in the background so other clients see the change.
             let all = applyLocalTransitions(fetched, fireCloudKit: true)
-            let active    = try await buildRankedItems(from: all, status: .active,    userID: userID)
-            let completed = try await buildRankedItems(from: all, status: .completed, userID: userID)
+            var seenIDs = Set<String>([userID])
+            let active    = try await buildRankedItems(from: all, status: .active,    userID: userID, seenIDs: &seenIDs)
+            let completed = try await buildRankedItems(from: all, status: .completed, userID: userID, seenIDs: &seenIDs)
             applyAll(all, activeItems: active, completedItems: completed)
             ChallengeCache.save(challenges: all, activeItems: active, userID: userID)
+            // Prune avatars for users no longer in any of our challenges.
+            Task.detached { AvatarCache.pruneStale(keepingUserIDs: seenIDs) }
             SpotlightIndexer.index(all)
             Task { await NotificationScheduler.reschedule(for: all) }
         } catch {
@@ -238,7 +241,9 @@ final class HomeViewModel {
     }
 
     @MainActor
-    private func buildRankedItems(from all: [Challenge], status: ChallengeStatus, userID: String) async throws -> [TodayItem] {
+    private func buildRankedItems(from all: [Challenge], status: ChallengeStatus,
+                                  userID: String,
+                                  seenIDs: inout Set<String>) async throws -> [TodayItem] {
         let challenges = all.filter { $0.status == status }
         var items: [TodayItem] = []
         for challenge in challenges {
@@ -252,6 +257,8 @@ final class HomeViewModel {
             }
 
             let ranked = ScoreAggregator.ranked(parts)
+            // Collect every participant's user ID so we can prune stale avatar files.
+            seenIDs.formUnion(ranked.map { $0.user.id })
             guard let mine = ranked.first(where: { $0.user.id == userID }) else { continue }
 
             let todayPts = mine.dailyScores

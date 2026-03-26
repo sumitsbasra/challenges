@@ -48,4 +48,19 @@ enum AvatarCache {
             #endif
         }
     }
+
+    /// Removes cached avatars for user IDs not in `activeUserIDs`.
+    /// Call after loading the full participant list so old participants' files don't accumulate.
+    static func pruneStale(keepingUserIDs activeUserIDs: Set<String>) {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.lastPathComponent.hasPrefix("avatar_") {
+            let name = file.deletingPathExtension().lastPathComponent   // "avatar_<userID>"
+            let userID = String(name.dropFirst("avatar_".count))
+            if !userID.isEmpty && !activeUserIDs.contains(userID) {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
 }

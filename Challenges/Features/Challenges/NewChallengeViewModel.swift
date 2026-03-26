@@ -87,10 +87,11 @@ final class NewChallengeViewModel {
             }
         }
         if let error = lastParticipationError {
-            self.error = "Challenge created but auto-join failed: \(error.localizedDescription)"
+            self.error = "Challenge created but auto-join failed. Please try again."
             #if DEBUG
             print("[NewChallenge] saveParticipation failed after 3 attempts: \(error)")
             #endif
+            return  // Don't show the success screen — creator has no participation record
         }
 
         createdChallenge = challenge

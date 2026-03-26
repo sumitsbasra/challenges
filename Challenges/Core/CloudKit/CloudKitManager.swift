@@ -197,8 +197,9 @@ final class CloudKitManager: ObservableObject {
     func backfillDisplayNameIfNeeded(participationID: String, displayName: String) async {
         guard let record = try? await publicDB.record(
             for: CKRecord.ID(recordName: participationID)) else { return }
-        // Only write if the field is absent — avoids a redundant round-trip each sync.
-        guard record["displayName"] as? String == nil else { return }
+        // Only write if the field is absent or empty — repairs records saved before
+        // the join flow was fixed to embed the user's real display name.
+        guard (record["displayName"] as? String ?? "").isEmpty else { return }
         record["displayName"] = displayName
         _ = try? await publicDB.save(record)
     }

@@ -111,7 +111,7 @@ struct NewChallengeView: View {
                             Button {
                                 Task {
                                     guard let userID = session.userID else { return }
-                                    await joinVM.joinChallenge(userID: userID, hasWatch: session.currentUser?.hasAppleWatch ?? false)
+                                    await joinVM.joinChallenge(userID: userID, displayName: session.currentUser?.displayName ?? "", hasWatch: session.currentUser?.hasAppleWatch ?? false)
                                     if joinVM.joined {
                                         UINotificationFeedbackGenerator().notificationOccurred(.success)
                                         dismiss()
@@ -133,10 +133,10 @@ struct NewChallengeView: View {
     // MARK: - Create
 
     private var minStartDate: Date {
-        Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+        Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
     }
     private var minEndDate: Date {
-        Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: vm.startDate)!)
+        Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: vm.startDate) ?? vm.startDate)
     }
 
     @ViewBuilder

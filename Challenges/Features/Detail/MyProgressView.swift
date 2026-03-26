@@ -74,7 +74,7 @@ struct MyProgressView: View {
             .padding(.leading, 16)
             .padding(.vertical, 14)
 
-            // Metric rows
+            // Metric rows — frame fills remaining width so content spreads to the right edge
             VStack(alignment: .leading, spacing: 10) {
                 if participation.hasAppleWatch {
                     MetricRowView(label: "Move",
@@ -108,6 +108,7 @@ struct MyProgressView: View {
                                   unit: "CAL", color: .standRing)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.trailing, 16)
         }
         .padding(.bottom, 16)

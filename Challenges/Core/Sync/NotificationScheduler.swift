@@ -20,6 +20,14 @@ enum NotificationScheduler {
         let prefs = NotificationPrefs()
         var requests: [UNNotificationRequest] = []
 
+        // iOS caps pending notifications at 64. Reserve ~3 per non-completed challenge
+        // (start, end, final) and split the remaining budget evenly across active challenges.
+        let nonCompleted = challenges.filter { $0.status != .completed }.count
+        let activeCount  = challenges.filter { $0.status == .active }.count
+        let lifecycleBudget = nonCompleted * 3
+        let dailyBudget = max(0, 64 - lifecycleBudget)
+        let dailyPerChallenge = activeCount > 0 ? max(1, dailyBudget / activeCount) : 7
+
         for challenge in challenges {
             switch challenge.status {
             case .pending:
@@ -27,7 +35,7 @@ enum NotificationScheduler {
             case .active:
                 endingRequest(for: challenge, prefs: prefs).map  { requests.append($0) }
                 finalRequest(for: challenge, prefs: prefs).map   { requests.append($0) }
-                requests += dailyRequests(for: challenge, prefs: prefs)
+                requests += dailyRequests(for: challenge, prefs: prefs, limit: dailyPerChallenge)
             case .completed:
                 break
             }
@@ -100,7 +108,7 @@ enum NotificationScheduler {
         return request(id: "ch-final-\(challenge.id)", content: content, fireDate: fireDate)
     }
 
-    private static func dailyRequests(for challenge: Challenge, prefs: NotificationPrefs) -> [UNNotificationRequest] {
+    private static func dailyRequests(for challenge: Challenge, prefs: NotificationPrefs, limit: Int) -> [UNNotificationRequest] {
         guard prefs.dailyUpdate else { return [] }
 
         let cal = Calendar.current
@@ -112,7 +120,7 @@ enum NotificationScheduler {
         var requests: [UNNotificationRequest] = []
         var day = tomorrow
 
-        while day <= endDay && requests.count < 7 { // respect the 64-notification system cap
+        while day <= endDay && requests.count < limit { // limit respects the 64-notification system cap shared across all challenges
             var comps = cal.dateComponents([.year, .month, .day], from: day)
             comps.hour = 9
             if let fireDate = cal.date(from: comps), fireDate > now {

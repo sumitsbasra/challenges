@@ -31,7 +31,9 @@ final class ChallengeDetailViewModel {
 
     var currentUserParticipation: Participation? {
         let userID = UserSession.shared.userID ?? ""
-        return participations.first { $0.user.id == userID }
+        // Use rankedParticipations so totalPoints is already aggregated from dailyScores.
+        // The raw participations array keeps totalPoints = 0 until ScoreAggregator runs.
+        return rankedParticipations.first { $0.user.id == userID }
     }
 
     var daysRemaining: Int {

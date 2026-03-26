@@ -37,7 +37,13 @@ enum PointsCalculator {
             standRingPct: standPct,
             stepsPct: 0,
             activeEnergyPct: 0,
-            syncSource: .watch
+            syncSource: .watch,
+            moveCalories: moveCalories,
+            moveGoal: moveGoal,
+            exerciseMinutes: exerciseMinutes,
+            exerciseGoal: exerciseGoal,
+            standHours: standHours,
+            standGoal: standGoal
         )
         return (points, ringData)
     }
@@ -54,21 +60,29 @@ enum PointsCalculator {
     /// - Returns: Points (0–600) and ring data fractions.
     static func calculateNonWatch(
         steps: Double, stepsGoal: Double = 10_000,
-        activeEnergy: Double, activeEnergyGoal: Double = 500
+        activeEnergy: Double, activeEnergyGoal: Double = 500,
+        exerciseMinutes: Double, exerciseGoal: Double = 30
     ) -> (points: Double, ringData: RingData) {
-        let stepsPct  = clamp(steps        / max(stepsGoal, 1),        0, maxContributionMultiplier)
-        let energyPct = clamp(activeEnergy / max(activeEnergyGoal, 1), 0, maxContributionMultiplier)
+        let stepsPct    = clamp(steps           / max(stepsGoal, 1),        0, maxContributionMultiplier)
+        let energyPct   = clamp(activeEnergy    / max(activeEnergyGoal, 1), 0, maxContributionMultiplier)
+        let exercisePct = clamp(exerciseMinutes / max(exerciseGoal, 1),     0, maxContributionMultiplier)
 
-        let rawScore = (stepsPct + energyPct) / 2.0
+        let rawScore = (stepsPct + energyPct + exercisePct) / 3.0
         let points = rawScore * maxPointsPerDay
 
         let ringData = RingData(
-            moveRingPct: 0,
-            exerciseRingPct: 0,
-            standRingPct: 0,
-            stepsPct: stepsPct,
+            moveRingPct:     stepsPct,    // outer  ring = steps     (red)
+            exerciseRingPct: exercisePct, // middle ring = exercise  (green)
+            standRingPct:    energyPct,   // inner  ring = energy    (blue)
+            stepsPct:        stepsPct,
             activeEnergyPct: energyPct,
-            syncSource: .iphone
+            syncSource:      .iphone,
+            exerciseMinutes: exerciseMinutes,
+            exerciseGoal:    exerciseGoal,
+            steps:           steps,
+            stepsGoal:       stepsGoal,
+            activeEnergy:    activeEnergy,
+            activeEnergyGoal: activeEnergyGoal
         )
         return (points, ringData)
     }

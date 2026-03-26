@@ -22,7 +22,7 @@ struct WidgetState: Codable {
 /// a WidgetKit timeline reload so the widget reflects current data immediately.
 enum WidgetDataWriter {
 
-    private static let suiteName = "group.com.yourname.challenges"
+    private static let suiteName = "group.studio.ssb.challenges"
     private static let key = "widgetState"
 
     static func write(state: WidgetState) {

@@ -161,12 +161,24 @@ enum RecordMapper {
         }
 
         let ringData = RingData(
-            moveRingPct:     record["moveRingPct"]     as? Double ?? 0,
-            exerciseRingPct: record["exerciseRingPct"] as? Double ?? 0,
-            standRingPct:    record["standRingPct"]    as? Double ?? 0,
-            stepsPct:        record["stepsPct"]        as? Double ?? 0,
-            activeEnergyPct: record["activeEnergyPct"] as? Double ?? 0,
-            syncSource:      syncSource
+            moveRingPct:      record["moveRingPct"]      as? Double ?? 0,
+            exerciseRingPct:  record["exerciseRingPct"]  as? Double ?? 0,
+            standRingPct:     record["standRingPct"]     as? Double ?? 0,
+            stepsPct:         record["stepsPct"]         as? Double ?? 0,
+            activeEnergyPct:  record["activeEnergyPct"]  as? Double ?? 0,
+            syncSource:       syncSource,
+            moveCalories:     record["moveCalories"]     as? Double ?? 0,
+            moveGoal:         record["moveGoal"]         as? Double ?? 700,
+            exerciseMinutes:  record["exerciseMinutes"]  as? Double ?? 0,
+            exerciseGoal:     record["exerciseGoal"]     as? Double ?? 30,
+            standHours:       record["standHours"]       as? Double ?? 0,
+            standGoal:        record["standGoal"]        as? Double ?? 12,
+            steps:            record["steps"]            as? Double ?? 0,
+            stepsGoal:        record["stepsGoal"]        as? Double ?? 10_000,
+            activeEnergy:     record["activeEnergy"]     as? Double ?? 0,
+            activeEnergyGoal: record["activeEnergyGoal"] as? Double ?? 500,
+            totalSteps:       record["totalSteps"]       as? Double ?? 0,
+            distanceMeters:   record["distanceMeters"]   as? Double ?? 0
         )
 
         return DailyScore(
@@ -189,12 +201,24 @@ enum RecordMapper {
             recordID: CKRecord.ID(recordName: score.challengeID), action: .none)
         record["date"]            = score.date
         record["points"]          = score.points
-        record["moveRingPct"]     = score.ringData.moveRingPct
-        record["exerciseRingPct"] = score.ringData.exerciseRingPct
-        record["standRingPct"]    = score.ringData.standRingPct
-        record["stepsPct"]        = score.ringData.stepsPct
-        record["activeEnergyPct"] = score.ringData.activeEnergyPct
-        record["syncSource"]      = score.ringData.syncSource.rawValue
+        record["moveRingPct"]      = score.ringData.moveRingPct
+        record["exerciseRingPct"]  = score.ringData.exerciseRingPct
+        record["standRingPct"]     = score.ringData.standRingPct
+        record["stepsPct"]         = score.ringData.stepsPct
+        record["activeEnergyPct"]  = score.ringData.activeEnergyPct
+        record["syncSource"]       = score.ringData.syncSource.rawValue
+        record["moveCalories"]     = score.ringData.moveCalories
+        record["moveGoal"]         = score.ringData.moveGoal
+        record["exerciseMinutes"]  = score.ringData.exerciseMinutes
+        record["exerciseGoal"]     = score.ringData.exerciseGoal
+        record["standHours"]       = score.ringData.standHours
+        record["standGoal"]        = score.ringData.standGoal
+        record["steps"]            = score.ringData.steps
+        record["stepsGoal"]        = score.ringData.stepsGoal
+        record["activeEnergy"]     = score.ringData.activeEnergy
+        record["activeEnergyGoal"] = score.ringData.activeEnergyGoal
+        record["totalSteps"]       = score.ringData.totalSteps
+        record["distanceMeters"]   = score.ringData.distanceMeters
         return record
     }
 }

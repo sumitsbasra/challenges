@@ -5,35 +5,16 @@ import Observation
 @Observable
 final class NewChallengeViewModel {
 
+    static let defaultDurationDays = 7
+
     var title: String = ""
 
-    // Dates are always normalised: startDate → midnight, endDate → 23:59:59.
-    // This ensures challenges start and end at consistent, predictable times
-    // regardless of when the creator opened the sheet.
     var startDate: Date = Calendar.current.startOfDay(
-        for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!
-    ) {
-        didSet {
-            startDate = Calendar.current.startOfDay(for: startDate)
-            let tomorrowStart = Calendar.current.startOfDay(
-                for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
-            if startDate < tomorrowStart { startDate = tomorrowStart }
-            // end must be at least the day after start
-            let minEnd = NewChallengeViewModel.endOfDay(
-                Calendar.current.date(byAdding: .day, value: 1, to: startDate)!)
-            if endDate < minEnd { endDate = minEnd }
-        }
-    }
+        for: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+    )
     var endDate: Date = NewChallengeViewModel.endOfDay(
-        Calendar.current.date(byAdding: .day, value: 7, to: Date())!
-    ) {
-        didSet {
-            endDate = NewChallengeViewModel.endOfDay(endDate)
-            let minEnd = NewChallengeViewModel.endOfDay(
-                Calendar.current.date(byAdding: .day, value: 1, to: startDate)!)
-            if endDate < minEnd { endDate = minEnd }
-        }
-    }
+        Calendar.current.date(byAdding: .day, value: NewChallengeViewModel.defaultDurationDays, to: Date()) ?? Date()
+    )
 
     /// Returns 23:59:59 on the same calendar day as `date`.
     static func endOfDay(_ date: Date) -> Date {
@@ -67,8 +48,8 @@ final class NewChallengeViewModel {
             id: UUID().uuidString,
             title: title.trimmingCharacters(in: .whitespaces),
             creatorID: creator.id,
-            startDate: startDate,
-            endDate: endDate,
+            startDate: Calendar.current.startOfDay(for: startDate),
+            endDate: NewChallengeViewModel.endOfDay(endDate),
             status: .pending,
             inviteCode: inviteCode,
             maxParticipants: maxParticipants,

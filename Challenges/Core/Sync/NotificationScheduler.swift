@@ -35,7 +35,15 @@ enum NotificationScheduler {
 
         // Atomically replace all existing challenge notifications
         await removeAllChallenge(center: center)
-        for req in requests { try? await center.add(req) }
+        for req in requests {
+            do {
+                try await center.add(req)
+            } catch {
+                #if DEBUG
+                print("[NotificationScheduler] Failed to add notification \(req.identifier): \(error)")
+                #endif
+            }
+        }
     }
 
     /// Removes all pending notifications for a single challenge.

@@ -3,6 +3,7 @@ import SwiftUI
 struct HealthPermissionsView: View {
     @ObservedObject private var hk = HealthKitManager.shared
     @State private var isRequesting = false
+    @State private var requestError: String? = nil
 
     var body: some View {
         List {
@@ -32,8 +33,13 @@ struct HealthPermissionsView: View {
                 Section {
                     Button {
                         isRequesting = true
+                        requestError = nil
                         Task {
-                            try? await hk.requestAuthorization()
+                            do {
+                                try await hk.requestAuthorization()
+                            } catch {
+                                requestError = error.localizedDescription
+                            }
                             isRequesting = false
                         }
                     } label: {
@@ -62,6 +68,14 @@ struct HealthPermissionsView: View {
         }
         .navigationTitle("Health Permissions")
         .onAppear { hk.updateAuthorizationStatus() }
+        .alert("Permission Error", isPresented: Binding(
+            get: { requestError != nil },
+            set: { if !$0 { requestError = nil } }
+        )) {
+            Button("OK", role: .cancel) { requestError = nil }
+        } message: {
+            Text(requestError ?? "")
+        }
     }
 }
 

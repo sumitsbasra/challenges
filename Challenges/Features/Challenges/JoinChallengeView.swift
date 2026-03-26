@@ -181,6 +181,19 @@ struct JoinChallengeView: View {
             }
             .padding(.horizontal, 16)
 
+            if challenge.status == .active {
+                HStack(spacing: 8) {
+                    Image(systemName: "flame.fill")
+                        .foregroundStyle(.orange)
+                        .font(.subheadline)
+                    Text("This challenge is in progress. Your score will count from today.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 24)
+                .multilineTextAlignment(.center)
+            }
+
             Button {
                 Task {
                     guard let userID = session.userID else { return }

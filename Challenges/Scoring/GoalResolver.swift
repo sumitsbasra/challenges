@@ -47,7 +47,7 @@ final class GoalResolver {
         await withCheckedContinuation { continuation in
             let calendar = Calendar.current
             let today = calendar.startOfDay(for: Date())
-            let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
+            let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? Date(timeInterval: 86400, since: today)
 
             var startComponents = calendar.dateComponents([.year, .month, .day], from: today)
             startComponents.calendar = calendar

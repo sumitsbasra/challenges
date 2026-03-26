@@ -15,7 +15,14 @@ enum AvatarCache {
         let sized = image.preparingThumbnail(of: CGSize(width: 400, height: 400)) ?? image
         guard let data = sized.jpegData(compressionQuality: 0.8) else { return nil }
         let destination = url(for: userID)
-        try? data.write(to: destination)
+        do {
+            try data.write(to: destination)
+        } catch {
+            #if DEBUG
+            print("[AvatarCache] Failed to save avatar for \(userID): \(error)")
+            #endif
+            return nil
+        }
         return destination
     }
 
@@ -33,6 +40,12 @@ enum AvatarCache {
     /// Writes raw JPEG data from a CKAsset to the cache. Call this after fetching a user record.
     static func cache(data: Data, userID: String) {
         let destination = url(for: userID)
-        try? data.write(to: destination)
+        do {
+            try data.write(to: destination)
+        } catch {
+            #if DEBUG
+            print("[AvatarCache] Failed to cache avatar data for \(userID): \(error)")
+            #endif
+        }
     }
 }

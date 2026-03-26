@@ -132,6 +132,13 @@ struct NewChallengeView: View {
 
     // MARK: - Create
 
+    private var minStartDate: Date {
+        Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+    }
+    private var minEndDate: Date {
+        Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: vm.startDate)!)
+    }
+
     @ViewBuilder
     private var createContent: some View {
         // Name
@@ -150,15 +157,23 @@ struct NewChallengeView: View {
         FitnessFormCard {
             VStack(spacing: 0) {
                 DatePicker("Start Date", selection: Bindable(vm).startDate,
-                           in: Calendar.current.date(byAdding: .day, value: 1, to: Date())!...,
+                           in: minStartDate...,
                            displayedComponents: .date)
                     .datePickerStyle(.compact)
                     .tint(.moveRing)
+                    .onChange(of: vm.startDate) { _, newStart in
+                        // Defer end-date clamp so it doesn't conflict with
+                        // the picker's own update cycle
+                        let minEnd = Calendar.current.date(byAdding: .day, value: 1, to: newStart)!
+                        if vm.endDate < minEnd {
+                            DispatchQueue.main.async { vm.endDate = minEnd }
+                        }
+                    }
 
                 Divider().padding(.vertical, 10)
 
                 DatePicker("End Date", selection: Bindable(vm).endDate,
-                           in: Calendar.current.date(byAdding: .day, value: 1, to: Bindable(vm).startDate.wrappedValue)!...,
+                           in: minEndDate...,
                            displayedComponents: .date)
                     .datePickerStyle(.compact)
                     .tint(.moveRing)
@@ -271,43 +286,61 @@ struct NewChallengeView: View {
 
 private struct ChallengeCreatedView: View {
     let challenge: Challenge
-
-    @State private var checkVisible = false
+    @State private var appeared = false
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
 
-            // Check mark hero
+            // Flame hero — springs in, then static
             ZStack {
-                Circle()
-                    .fill(Color.exerciseRing.opacity(0.12))
-                    .frame(width: 100, height: 100)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 38, weight: .bold))
-                    .foregroundStyle(Color.exerciseRing)
-                    .scaleEffect(checkVisible ? 1 : 0.3)
-                    .opacity(checkVisible ? 1 : 0)
-                    .animation(.spring(response: 0.45, dampingFraction: 0.6).delay(0.1), value: checkVisible)
+                // Blurred glow halo
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 90))
+                    .foregroundStyle(Color.orange.opacity(0.25))
+                    .blur(radius: 18)
+
+                // Core flame with orange→yellow gradient
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 1.0, green: 0.45, blue: 0.0), // deep orange base
+                                Color(red: 1.0, green: 0.80, blue: 0.1)  // yellow tip
+                            ],
+                            startPoint: .bottom,
+                            endPoint: .top
+                        )
+                    )
             }
+            .scaleEffect(appeared ? 1 : 0.2)
+            .opacity(appeared ? 1 : 0)
+            .animation(.spring(response: 0.5, dampingFraction: 0.55).delay(0.05), value: appeared)
             .padding(.bottom, 28)
 
             Text("Challenge Created")
                 .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(.primary)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 8)
+                .animation(.spring(response: 0.5, dampingFraction: 0.75).delay(0.2), value: appeared)
                 .padding(.bottom, 8)
 
             Text("Share the invite code with friends\nso they can join.")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
+                .opacity(appeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.4).delay(0.3), value: appeared)
                 .padding(.bottom, 36)
 
-            // Invite code card
             FitnessFormCard {
                 InviteCodeView(code: challenge.inviteCode)
             }
             .padding(.horizontal, 16)
+            .opacity(appeared ? 1 : 0)
+            .animation(.easeOut(duration: 0.4).delay(0.4), value: appeared)
 
             Spacer()
 
@@ -326,8 +359,12 @@ private struct ChallengeCreatedView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 24)
             .padding(.bottom, 48)
+            .opacity(appeared ? 1 : 0)
+            .animation(.easeOut(duration: 0.4).delay(0.5), value: appeared)
         }
-        .onAppear { checkVisible = true }
+        .onAppear {
+            withAnimation { appeared = true }
+        }
     }
 }
 

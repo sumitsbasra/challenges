@@ -35,13 +35,24 @@ actor ActivityDataFetcher {
         }
     }
 
-    // MARK: - Steps (non-Watch path)
+    // MARK: - Steps
 
     /// Returns step count for the given calendar day.
     func steps(on date: Date) async -> Double {
         await querySum(
             type: HKQuantityType(.stepCount),
             unit: .count(),
+            on: date
+        )
+    }
+
+    // MARK: - Distance
+
+    /// Returns walking + running distance (meters) for the given calendar day.
+    func distanceMeters(on date: Date) async -> Double {
+        await querySum(
+            type: HKQuantityType(.distanceWalkingRunning),
+            unit: .meter(),
             on: date
         )
     }
@@ -72,7 +83,7 @@ actor ActivityDataFetcher {
     private func querySum(type: HKQuantityType, unit: HKUnit, on date: Date) async -> Double {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: date)
-        let end   = calendar.date(byAdding: .day, value: 1, to: start)!
+        let end   = calendar.date(byAdding: .day, value: 1, to: start) ?? Date(timeInterval: 86400, since: start)
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
 
         return await withCheckedContinuation { continuation in

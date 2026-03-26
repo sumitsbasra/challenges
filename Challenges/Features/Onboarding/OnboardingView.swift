@@ -258,7 +258,15 @@ struct OnboardingView: View {
 
     private func startWelcomeRings() {
         // Ask for notification permission now that the user has completed onboarding setup.
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            #if DEBUG
+            if let error = error {
+                print("[Onboarding] Notification authorization error: \(error)")
+            } else {
+                print("[Onboarding] Notification authorization granted: \(granted)")
+            }
+            #endif
+        }
         // Snap to zero without any animation (suppresses implicit spring on the overlay)
         var t = Transaction()
         t.disablesAnimations = true

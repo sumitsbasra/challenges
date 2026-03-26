@@ -8,7 +8,11 @@ enum BackgroundTaskScheduler {
 
     static func registerTasks() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: syncTaskID, using: nil) { task in
-            handleAppRefresh(task: task as! BGAppRefreshTask)
+            guard let refreshTask = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            handleAppRefresh(task: refreshTask)
         }
     }
 

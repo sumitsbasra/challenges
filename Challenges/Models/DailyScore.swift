@@ -22,7 +22,7 @@ struct DailyScore: Identifiable, Codable {
     /// regardless of viewer timezone.
     static func noonUTC(for date: Date) -> Date {
         var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
+        cal.timeZone = TimeZone(identifier: "UTC") ?? TimeZone(secondsFromGMT: 0)!
         let components = cal.dateComponents([.year, .month, .day], from: date)
         var noonComponents = components
         noonComponents.hour = 12

@@ -39,8 +39,7 @@ actor SyncCoordinator {
                 await syncChallenge(challenge, userID: userID)
             }
 
-            // Widget state update requires WidgetDataWriter to be added to the app target.
-            // await updateWidgetState(userID: userID, activeChallenges: active)
+            await updateWidgetState(userID: userID, activeChallenges: active)
         } catch {
             #if DEBUG
             print("[SyncCoordinator] Failed to fetch challenges: \(error)")
@@ -59,9 +58,11 @@ actor SyncCoordinator {
 
         let hasWatch = participation.hasAppleWatch
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let startDay = calendar.startOfDay(for: challenge.startDate)
-        let endDay = min(today, calendar.startOfDay(for: challenge.endDate))
+        let today    = calendar.startOfDay(for: Date())
+        // Late joiners start scoring from their join date, not the challenge start date.
+        let effectiveStart = max(challenge.startDate, participation.joinedAt)
+        let startDay = calendar.startOfDay(for: effectiveStart)
+        let endDay   = min(today, calendar.startOfDay(for: challenge.endDate))
 
         // Collect all days in the competition window.
         var days: [Date] = []
@@ -91,11 +92,17 @@ actor SyncCoordinator {
                 let exerciseMins = summary?.appleExerciseTime.doubleValue(for: .minute()) ?? 0
                 let standHours   = summary?.appleStandHours.doubleValue(for: .count()) ?? 0
 
-                let (points, ringData) = PointsCalculator.calculateWatch(
+                async let stepsTask    = fetcher.steps(on: day)
+                async let distanceTask = fetcher.distanceMeters(on: day)
+                let (steps, distance)  = await (stepsTask, distanceTask)
+
+                var (points, ringData) = PointsCalculator.calculateWatch(
                     moveCalories: moveCalories, moveGoal: moveGoal,
                     exerciseMinutes: exerciseMins,
                     standHours: standHours
                 )
+                ringData.totalSteps     = steps
+                ringData.distanceMeters = distance
 
                 let noonUTC = DailyScore.noonUTC(for: day)
                 let scoreID = DailyScore.makeID(participationID: participation.id, date: day)
@@ -113,16 +120,21 @@ actor SyncCoordinator {
             let goalResolver = GoalResolver()
 
             for day in days {
-                async let stepsTask   = fetcher.steps(on: day)
-                async let energyTask  = fetcher.activeEnergy(on: day)
-                let (steps, energy) = await (stepsTask, energyTask)
+                async let stepsTask    = fetcher.steps(on: day)
+                async let energyTask   = fetcher.activeEnergy(on: day)
+                async let exerciseTask = fetcher.exerciseMinutes(on: day)
+                async let distanceTask = fetcher.distanceMeters(on: day)
+                let (steps, energy, exercise, distance) = await (stepsTask, energyTask, exerciseTask, distanceTask)
 
-                let stepsGoal = goalResolver.stepsGoal
-                let energyGoal = goalResolver.activeEnergyGoal
-                let (points, ringData) = PointsCalculator.calculateNonWatch(
+                let stepsGoal    = goalResolver.stepsGoal
+                let energyGoal   = goalResolver.activeEnergyGoal
+                var (points, ringData) = PointsCalculator.calculateNonWatch(
                     steps: steps, stepsGoal: stepsGoal,
-                    activeEnergy: energy, activeEnergyGoal: energyGoal
+                    activeEnergy: energy, activeEnergyGoal: energyGoal,
+                    exerciseMinutes: exercise
                 )
+                ringData.totalSteps     = steps
+                ringData.distanceMeters = distance
 
                 let noonUTC = DailyScore.noonUTC(for: day)
                 let scoreID = DailyScore.makeID(participationID: participation.id, date: day)
@@ -164,6 +176,35 @@ actor SyncCoordinator {
                 // after the last day — no arbitrary buffer needed.
                 await transitionStatus(of: challenge, to: .completed, ck: ck)
             }
+        }
+    }
+
+    // MARK: - Widget state
+
+    /// Writes the top active challenge's rank and score to shared App Group UserDefaults
+    /// so the widget can display current standings without a CloudKit fetch.
+    private func updateWidgetState(userID: String, activeChallenges: [Challenge]) async {
+        guard let topChallenge = activeChallenges.first else { return }
+        let ck = await MainActor.run { CloudKitManager.shared }
+        do {
+            var participations = try await ck.fetchParticipations(challengeID: topChallenge.id)
+            ScoreAggregator.aggregate(&participations)
+            guard let mine = participations.first(where: { $0.user.id == userID }) else { return }
+            let daysRemaining = max(0, Calendar.current.dateComponents([.day], from: Date(), to: topChallenge.endDate).day ?? 0)
+            let state = WidgetState(
+                challengeTitle: topChallenge.title,
+                challengeID: topChallenge.id,
+                rank: mine.rank,
+                totalPoints: mine.totalPoints,
+                daysRemaining: daysRemaining,
+                participantCount: participations.count,
+                updatedAt: Date()
+            )
+            WidgetDataWriter.write(state: state)
+        } catch {
+            #if DEBUG
+            print("[SyncCoordinator] updateWidgetState failed for challenge \(topChallenge.id): \(error)")
+            #endif
         }
     }
 

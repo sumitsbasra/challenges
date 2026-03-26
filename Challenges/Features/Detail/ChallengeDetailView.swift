@@ -39,17 +39,18 @@ struct ChallengeDetailView: View {
                         .padding(.top, 20)
                 }
 
-                // 4. Results/Leaderboard — hidden until challenge starts
+                // 4. Results/Leaderboard
                 if challenge.status == .completed {
                     PodiumSection(participations: vm.rankedParticipations, userID: session.userID)
                         .padding(.top, 28)
-                } else if challenge.status == .active {
+                } else {
+                    // Show for both pending and active — pending shows who's joined, no ranks
                     leaderboardSection
                         .padding(.top, 28)
                 }
 
-                // 4. Invite code — creator only, pending challenges
-                if challenge.status == .pending,
+                // 5. Invite code — creator only, pending or active challenges
+                if challenge.status != .completed,
                    challenge.creatorID == (session.userID ?? "") {
                     inviteSection
                         .padding(.top, 28)
@@ -80,7 +81,7 @@ struct ChallengeDetailView: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 // Share button
-                if challenge.status == .pending,
+                if challenge.status != .completed,
                    challenge.creatorID == (session.userID ?? "") {
                     ShareLink(
                         item: URL(string: "challenges://join/\(challenge.inviteCode)")!,
@@ -96,18 +97,20 @@ struct ChallengeDetailView: View {
                         Button {
                             showEditChallenge = true
                         } label: {
-                            Label("Edit", systemImage: "pencil")
+                            Label("Edit Challenge", systemImage: "pencil")
                         }
                         Button(role: .destructive) {
                             showDeleteConfirm = true
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            Label("Delete Challenge", systemImage: "trash")
+                                .tint(.red)
                         }
                     } else {
                         Button(role: .destructive) {
                             showLeaveConfirm = true
                         } label: {
-                            Label("Leave", systemImage: "rectangle.portrait.and.arrow.right")
+                            Label("Leave Challenge", systemImage: "rectangle.portrait.and.arrow.right")
+                                .tint(.red)
                         }
                     }
                 } label: {
@@ -214,7 +217,7 @@ struct ChallengeDetailView: View {
 
     private var leaderboardSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            FitnessSectionHeader(title: "Leaderboard")
+            FitnessSectionHeader(title: challenge.status == .pending ? "Participants" : "Leaderboard")
                 .padding(.horizontal, 20)
 
             ZStack {
@@ -226,7 +229,7 @@ struct ChallengeDetailView: View {
                         .padding(32)
                 } else if vm.rankedParticipations.isEmpty {
                     VStack(spacing: 6) {
-                        Text(challenge.status == .active ? "No participants yet." : "Waiting for participants.")
+                        Text(challenge.status == .pending ? "Waiting for participants." : "No participants yet.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         if challenge.status == .pending {
@@ -280,9 +283,12 @@ struct ChallengeDetailView: View {
 
     private var statusColor: Color {
         switch challenge.status {
-        case .active:    return .exerciseRing
         case .pending:   return .stepsColor
         case .completed: return .secondaryText
+        case .active:
+            let text = vm.countdownText
+            if text == "Ends today" || text == "Ends tomorrow" { return .moveRing }
+            return .exerciseRing
         }
     }
 }
@@ -508,28 +514,57 @@ private struct ScoreHistoryChart: View {
 
     private var today: Date { Calendar.current.startOfDay(for: Date()) }
 
+    /// Half-day before start — pads the left edge so the first dot isn't flush with the axis.
+    private var chartStartDate: Date {
+        let start = Calendar.current.startOfDay(for: challenge.startDate)
+        return start.addingTimeInterval(-43_200) // -12 hours
+    }
+
+    /// Half-day after the last day ends — pads the right edge so the last dot has room.
+    private var chartEndDate: Date {
+        let endDay = Calendar.current.startOfDay(for: challenge.endDate)
+        let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: endDay) ?? endDay
+        return nextDay.addingTimeInterval(43_200) // +12 hours
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             FitnessSectionHeader(title: "My Points")
 
             Chart(scores, id: \.id) { score in
                 let day = Calendar.current.startOfDay(for: score.date)
-                BarMark(
+                AreaMark(
                     x: .value("Day", day, unit: .day),
                     y: .value("Points", score.points)
                 )
                 .foregroundStyle(
-                    day == today
-                        ? Color.moveRing
-                        : Color.moveRing.opacity(0.45)
+                    LinearGradient(
+                        colors: [Color.moveRing.opacity(0.35), Color.moveRing.opacity(0.0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
-                .cornerRadius(4)
+                .interpolationMethod(.monotone)
+                LineMark(
+                    x: .value("Day", day, unit: .day),
+                    y: .value("Points", score.points)
+                )
+                .foregroundStyle(Color.moveRing)
+                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .interpolationMethod(.monotone)
+                PointMark(
+                    x: .value("Day", day, unit: .day),
+                    y: .value("Points", score.points)
+                )
+                .foregroundStyle(day == today ? Color.moveRing : Color.moveRing.opacity(0.7))
+                .symbolSize(day == today ? 40 : 20)
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day)) { value in
                     if let date = value.as(Date.self) {
+                        // "M/d" → "3/24", "3/25", etc.
                         let label = date.formatted(.dateTime.day())
-                        AxisValueLabel(label)
+                        AxisValueLabel(label, centered: true)
                             .font(.system(size: 10))
                             .foregroundStyle(Color.secondary)
                     }
@@ -543,7 +578,7 @@ private struct ScoreHistoryChart: View {
                     AxisGridLine().foregroundStyle(Color.white.opacity(0.07))
                 }
             }
-            .chartXScale(domain: challenge.startDate...challenge.endDate)
+            .chartXScale(domain: chartStartDate...chartEndDate)
             .frame(height: 100)
         }
         .padding(16)

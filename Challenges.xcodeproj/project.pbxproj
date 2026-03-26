@@ -28,7 +28,6 @@
 		A1000017 /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000017 /* UserSession.swift */; };
 		A1000018 /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000018 /* SyncCoordinator.swift */; };
 		A1000019 /* BackgroundTaskScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000019 /* BackgroundTaskScheduler.swift */; };
-		A1000070 /* NotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000070 /* NotificationScheduler.swift */; };
 		A1000020 /* SubscriptionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000020 /* SubscriptionHandler.swift */; };
 		A1000021 /* FitnessColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000021 /* FitnessColors.swift */; };
 		A1000022 /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000022 /* Typography.swift */; };
@@ -65,6 +64,7 @@
 		A1000060 /* ChallengeCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000060 /* ChallengeCache.swift */; };
 		A1000061 /* ParticipationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000061 /* ParticipationCache.swift */; };
 		A1000062 /* AvatarCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000062 /* AvatarCache.swift */; };
+		A1000070 /* NotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000070 /* NotificationScheduler.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -89,7 +89,6 @@
 		B1000017 /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
 		B1000018 /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		B1000019 /* BackgroundTaskScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundTaskScheduler.swift; sourceTree = "<group>"; };
-		B1000070 /* NotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduler.swift; sourceTree = "<group>"; };
 		B1000020 /* SubscriptionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionHandler.swift; sourceTree = "<group>"; };
 		B1000021 /* FitnessColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FitnessColors.swift; sourceTree = "<group>"; };
 		B1000022 /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
@@ -128,6 +127,7 @@
 		B1000060 /* ChallengeCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeCache.swift; sourceTree = "<group>"; };
 		B1000061 /* ParticipationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipationCache.swift; sourceTree = "<group>"; };
 		B1000062 /* AvatarCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarCache.swift; sourceTree = "<group>"; };
+		B1000070 /* NotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduler.swift; sourceTree = "<group>"; };
 		C0000001 /* Challenges.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Challenges.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -548,7 +548,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = Challenges/Resources/Challenges.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Challenges/Resources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Challenges;
@@ -574,7 +574,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = Challenges/Resources/Challenges.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Challenges/Resources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Challenges;

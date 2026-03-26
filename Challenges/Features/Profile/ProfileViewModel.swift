@@ -33,7 +33,11 @@ final class ProfileViewModel {
             UserSession.shared.update(user: user)
             let jpegData = image.preparingThumbnail(of: CGSize(width: 400, height: 400))
                 .flatMap { $0.jpegData(compressionQuality: 0.8) }
-            try? await ck.saveUser(user, avatarData: jpegData)
+            do {
+                try await ck.saveUser(user, avatarData: jpegData)
+            } catch {
+                await MainActor.run { self.error = error.localizedDescription }
+            }
         }
     }
 
@@ -60,7 +64,11 @@ final class ProfileViewModel {
         guard var user = UserSession.shared.currentUser else { return }
         user.hasAppleWatch = detected
         UserSession.shared.update(user: user)
-        try? await ck.saveUser(user)
+        do {
+            try await ck.saveUser(user)
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     @MainActor

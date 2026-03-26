@@ -22,6 +22,9 @@ struct MyProgressView: View {
             metricsRow
             Divider()
                 .padding(.horizontal, 16)
+            stepsDistanceRow
+            Divider()
+                .padding(.horizontal, 16)
             footer
         }
         .background(Color.cardBackground)
@@ -60,44 +63,87 @@ struct MyProgressView: View {
     // MARK: - Rings + metrics
 
     private var metricsRow: some View {
-        HStack(alignment: .center, spacing: 18) {
-            // Rings
+        HStack(alignment: .center, spacing: 16) {
+            // Rings — leading edge aligned with the card's 16pt padding
             Group {
-                if participation.hasAppleWatch {
-                    ThreeRingView(ringData: rings, size: 130)
-                } else {
-                    TwoRingView(ringData: rings, size: 130)
-                }
+                // Both paths now show 3 rings:
+                // Watch  → Move / Exercise / Stand
+                // iPhone → Steps / Exercise / Active Energy (outer→inner)
+                ThreeRingView(ringData: rings, size: 130)
             }
-            .padding(.leading, 14)
+            .padding(.leading, 16)
             .padding(.vertical, 14)
 
             // Metric rows
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
                 if participation.hasAppleWatch {
                     MetricRowView(label: "Move",
-                                  pct: rings.moveRingPct,
+                                  actual: rings.moveCalories,
+                                  goal: rings.moveGoal,
                                   unit: "CAL", color: .moveRing)
+                    Divider().opacity(0.2)
                     MetricRowView(label: "Exercise",
-                                  pct: rings.exerciseRingPct,
+                                  actual: rings.exerciseMinutes,
+                                  goal: rings.exerciseGoal,
                                   unit: "MIN", color: .exerciseRing)
+                    Divider().opacity(0.2)
                     MetricRowView(label: "Stand",
-                                  pct: rings.standRingPct,
+                                  actual: rings.standHours,
+                                  goal: rings.standGoal,
                                   unit: "HRS", color: .standRing)
                 } else {
                     MetricRowView(label: "Steps",
-                                  pct: rings.stepsPct,
-                                  unit: "STEPS", color: .stepsColor)
+                                  actual: rings.steps,
+                                  goal: rings.stepsGoal,
+                                  unit: "STEPS", color: .moveRing)
+                    Divider().opacity(0.2)
+                    MetricRowView(label: "Exercise",
+                                  actual: rings.exerciseMinutes,
+                                  goal: rings.exerciseGoal,
+                                  unit: "MIN", color: .exerciseRing)
+                    Divider().opacity(0.2)
                     MetricRowView(label: "Energy",
-                                  pct: rings.activeEnergyPct,
-                                  unit: "CAL", color: .activeEnergyColor)
+                                  actual: rings.activeEnergy,
+                                  goal: rings.activeEnergyGoal,
+                                  unit: "CAL", color: .standRing)
                 }
             }
-
-            Spacer(minLength: 0)
+            .padding(.trailing, 16)
         }
-        .padding(.trailing, 16)
         .padding(.bottom, 16)
+    }
+
+    // MARK: - Steps + Distance
+
+    private var stepsDistanceRow: some View {
+        HStack(spacing: 0) {
+            StatCell(
+                label: "Steps",
+                value: rings.totalSteps.formatted(.number.grouping(.automatic).precision(.fractionLength(0)))
+            )
+            .frame(maxWidth: .infinity)
+            Color.fitnessSeparator
+                .frame(width: 0.5, height: 28)
+            StatCell(
+                label: "Distance",
+                value: distanceString
+            )
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.vertical, 12)
+    }
+
+    private var distanceString: String {
+        let meters = rings.distanceMeters
+        let locale = Locale.current
+        let usesMetric = locale.measurementSystem != .us
+        if usesMetric {
+            let km = meters / 1000
+            return String(format: "%.2f km", km)
+        } else {
+            let miles = meters / 1609.344
+            return String(format: "%.2f mi", miles)
+        }
     }
 
     // MARK: - Footer
@@ -142,43 +188,59 @@ struct MyProgressView: View {
 
 // MARK: - Metric Row
 
-/// Single ring metric displayed exactly like Apple Fitness:
-/// colored dot · label · large colored completion percentage + unit
+/// Apple Fitness-style metric row: label on top, "actual/goal UNIT" below.
 private struct MetricRowView: View {
-    let label: String
-    let pct: Double       // 0.0–2.0
-    let unit: String
-    let color: Color
+    let label:  String
+    let actual: Double
+    let goal:   Double
+    let unit:   String
+    let color:  Color
 
-    private var completionPct: Int { Int(pct * 100) }
+    // Format whole numbers without decimals; keep 1 decimal for fractional values (stand hours)
+    private func fmt(_ v: Double) -> String {
+        v.truncatingRemainder(dividingBy: 1) == 0
+            ? String(Int(v))
+            : String(format: "%.0f", v)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // Label row with colored dot
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(color)
-                    .frame(width: 7, height: 7)
-                Text(label)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-            }
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
 
-            // Value row: "156%" in ring color, small unit beside it
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text("\(completionPct)")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .monospacedDigit()
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text(fmt(actual))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(color)
-                Text("%")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(color.opacity(0.75))
-                    .padding(.leading, 1)
-                Text(unit)
-                    .font(.system(size: 9, weight: .semibold))
-                    .tracking(0.4)
-                    .foregroundStyle(color.opacity(0.65))
+                Text("/\(fmt(goal))")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(color.opacity(0.45))
+                Text(" \(unit)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.3)
+                    .foregroundStyle(color.opacity(0.6))
+                    .padding(.leading, 2)
             }
+            .monospacedDigit()
+        }
+    }
+}
+
+// MARK: - Stat Cell (steps / distance)
+
+private struct StatCell: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

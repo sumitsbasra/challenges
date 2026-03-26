@@ -7,7 +7,7 @@ enum RecordMapper {
     // MARK: - Record type names
 
     enum RecordType {
-        static let user          = "Users"
+        static let user          = "User"
         static let challenge     = "Challenge"
         static let participation = "Participation"
         static let dailyScore    = "DailyScore"
@@ -140,6 +140,10 @@ enum RecordMapper {
         record["joinedAt"]       = participation.joinedAt
         record["status"]         = participation.status.rawValue
         record["hasAppleWatch"]  = participation.hasAppleWatch ? 1 : 0
+        // Denormalise the display name onto the participation record so other
+        // participants can always show a name even when the Users record is
+        // not readable (e.g. restrictive CloudKit security roles or propagation delay).
+        record["displayName"]    = participation.user.displayName
         return record
     }
 

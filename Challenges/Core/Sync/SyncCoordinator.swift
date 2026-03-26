@@ -57,6 +57,15 @@ actor SyncCoordinator {
         else { return }
 
         let hasWatch = participation.hasAppleWatch
+
+        // Backfill the display name onto the participation record so that other
+        // participants can show this user's name even if the Users record is
+        // not readable due to CloudKit security role restrictions.
+        if let displayName = UserSession.shared.currentUser?.displayName {
+            await ck.backfillDisplayNameIfNeeded(participationID: participation.id,
+                                                 displayName: displayName)
+        }
+
         let calendar = Calendar.current
         let today    = calendar.startOfDay(for: Date())
         // Late joiners start scoring from their join date, not the challenge start date.

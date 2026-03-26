@@ -190,6 +190,19 @@ final class CloudKitManager: ObservableObject {
         _ = try await publicDB.save(record)
     }
 
+    /// Backfills the `displayName` field on an existing participation record if it
+    /// is missing. This lets other participants resolve names without reading the
+    /// owner's Users record (which may be restricted by CloudKit security roles).
+    /// No-ops silently if the field is already set or the write fails.
+    func backfillDisplayNameIfNeeded(participationID: String, displayName: String) async {
+        guard let record = try? await publicDB.record(
+            for: CKRecord.ID(recordName: participationID)) else { return }
+        // Only write if the field is absent — avoids a redundant round-trip each sync.
+        guard record["displayName"] as? String == nil else { return }
+        record["displayName"] = displayName
+        _ = try? await publicDB.save(record)
+    }
+
     /// Fetches all participations for a challenge.
     ///
     /// Uses a two-step approach to avoid an N+1 query:
@@ -243,19 +256,38 @@ final class CloudKitManager: ObservableObject {
         }
 
         // Step 5: assemble Participation values using the completed lookup.
-        // Only fall back to a placeholder if the user record truly doesn't exist yet.
+        // Fallback priority:
+        //   a) Full AppUser from the Users record (preferred)
+        //   b) Display name embedded on the Participation record itself (resilient to
+        //      restrictive CloudKit security roles on Users — written at join/create time)
+        //   c) Current user's own session data
+        //   d) Generic placeholder — should never be reached after (b) is populated
         return partRecords.compactMap { record -> Participation? in
             guard let userRef = record["userRef"] as? CKRecord.Reference else { return nil }
             let userID = userRef.recordID.recordName
-            let user = allUsers[userID] ?? AppUser(
+
+            if let fullUser = allUsers[userID] {
+                return RecordMapper.participation(from: record, user: fullUser)
+            }
+
+            // Build a lightweight user from the denormalised displayName field on
+            // the participation record — avoids cross-user record reads entirely.
+            let embeddedName = record["displayName"] as? String
+            let fallbackName: String
+            if let name = embeddedName, !name.isEmpty {
+                fallbackName = name
+            } else if UserSession.shared.currentUser?.id == userID {
+                fallbackName = UserSession.shared.currentUser?.displayName ?? "Me"
+            } else {
+                fallbackName = "..."
+            }
+            let fallbackUser = AppUser(
                 id: userID,
-                displayName: UserSession.shared.currentUser?.id == userID
-                    ? (UserSession.shared.currentUser?.displayName ?? "Me")
-                    : "...",
+                displayName: fallbackName,
                 appleUserID: "",
-                hasAppleWatch: false
+                hasAppleWatch: (record["hasAppleWatch"] as? Int) == 1
             )
-            return RecordMapper.participation(from: record, user: user)
+            return RecordMapper.participation(from: record, user: fallbackUser)
         }
     }
 

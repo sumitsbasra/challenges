@@ -3,7 +3,6 @@ import Intents
 import Charts
 
 struct ChallengeDetailView: View {
-    let challenge: Challenge
     @Environment(UserSession.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var vm: ChallengeDetailViewModel
@@ -11,8 +10,11 @@ struct ChallengeDetailView: View {
     @State private var showLeaveConfirm   = false
     @State private var showEditChallenge  = false
 
+    /// Always reads from the ViewModel so live status transitions (pending → active, etc.)
+    /// are immediately reflected in the UI without re-navigating.
+    private var challenge: Challenge { vm.challenge }
+
     init(challenge: Challenge) {
-        self.challenge = challenge
         _vm = State(initialValue: ChallengeDetailViewModel(challenge: challenge))
     }
 

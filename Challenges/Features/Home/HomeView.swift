@@ -129,7 +129,10 @@ final class HomeViewModel {
     func loadChallenges(userID: String) async {
         // Populate from cache immediately — no spinner if we have data.
         if let cached = ChallengeCache.load(userID: userID) {
-            applyAll(cached.challenges, activeItems: cached.activeItems, completedItems: [])
+            // Apply local status transitions to cached data so the badge text is
+            // correct even before the network fetch completes.
+            let locallyTransitioned = applyLocalTransitions(cached.challenges, fireCloudKit: false)
+            applyAll(locallyTransitioned, activeItems: cached.activeItems, completedItems: [])
             isRefreshingChallenges = true
         } else {
             isLoadingChallenges = true
@@ -141,7 +144,10 @@ final class HomeViewModel {
         }
 
         do {
-            let all = try await ck.fetchChallenges(forUserID: userID)
+            let fetched = try await ck.fetchChallenges(forUserID: userID)
+            // Immediately transition any challenges whose window has opened or closed,
+            // and fire CloudKit updates in the background so other clients see the change.
+            let all = applyLocalTransitions(fetched, fireCloudKit: true)
             let active    = try await buildRankedItems(from: all, status: .active,    userID: userID)
             let completed = try await buildRankedItems(from: all, status: .completed, userID: userID)
             applyAll(all, activeItems: active, completedItems: completed)
@@ -191,6 +197,32 @@ final class HomeViewModel {
         for i in completedChallenges.indices { patchChallenge(&completedChallenges[i]) }
         activeItems    = activeItems.map    { patchItem($0, id: id) { c in c.startDate = startDate; c.endDate = endDate } }
         completedItems = completedItems.map { patchItem($0, id: id) { c in c.startDate = startDate; c.endDate = endDate } }
+    }
+
+    /// Applies `pending → active` and `active → completed` transitions based on the
+    /// current date. When `fireCloudKit` is true, writes each transition to CloudKit in
+    /// the background — used on a fresh network fetch so other clients see the update.
+    @MainActor
+    private func applyLocalTransitions(_ challenges: [Challenge], fireCloudKit: Bool) -> [Challenge] {
+        let now = Date()
+        var result = challenges
+        for i in result.indices {
+            let c = result[i]
+            if c.status == .pending && c.startDate <= now {
+                result[i].status = .active
+                if fireCloudKit {
+                    let id = c.id
+                    Task { try? await CloudKitManager.shared.updateChallengeStatus(id, status: .active) }
+                }
+            } else if c.status == .active && c.endDate < now {
+                result[i].status = .completed
+                if fireCloudKit {
+                    let id = c.id
+                    Task { try? await CloudKitManager.shared.updateChallengeStatus(id, status: .completed) }
+                }
+            }
+        }
+        return result
     }
 
     /// Returns a new TodayItem with the challenge mutated by `modify`, or the original if IDs don't match.
@@ -302,6 +334,12 @@ struct HomeView: View {
         .task {
             guard let userID = session.userID else { return }
             profilePhoto = AvatarCache.load(userID: userID)
+            // Ensure the current user's CloudKit record exists. This is a no-op for
+            // existing users but repairs accounts whose initial saveUser failed due to
+            // a missing _icloud Create permission on the Users record type.
+            if let user = session.currentUser {
+                try? await CloudKitManager.shared.saveUser(user)
+            }
             await vm.load(userID: userID)
             // Kick off background work once data is loaded.
             await SyncCoordinator.shared.syncCurrentChallenges()

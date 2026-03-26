@@ -64,11 +64,37 @@ final class ChallengeDetailViewModel {
         }
     }
 
+    // MARK: - Local status transition
+
+    /// Applies `pending → active` or `active → completed` based on the current date.
+    /// Updates the in-memory `challenge.status` immediately so the UI is correct, then
+    /// fires a background CloudKit write so other clients receive the change.
+    @MainActor
+    private func applyLocalTransition() {
+        let now = Date()
+        if challenge.status == .pending && challenge.startDate <= now {
+            challenge.status = .active
+            let id = challenge.id
+            Task { try? await CloudKitManager.shared.updateChallengeStatus(id, status: .active) }
+            // Post so HomeView moves this challenge from upcomingChallenges to activeItems.
+            NotificationCenter.default.post(name: .participationDidChange, object: nil)
+        } else if challenge.status == .active && challenge.endDate < now {
+            challenge.status = .completed
+            let id = challenge.id
+            Task { try? await CloudKitManager.shared.updateChallengeStatus(id, status: .completed) }
+            NotificationCenter.default.post(name: .participationDidChange, object: nil)
+        }
+    }
+
     // MARK: - Phase 1: Initial Load
 
     /// Shows cached participations instantly, then refreshes from CloudKit in the background.
     @MainActor
     func load() async {
+        // Apply any pending status transition before showing the UI so the
+        // countdownText, leaderboard section title, and sync path are all correct.
+        applyLocalTransition()
+
         // Show cached data immediately — no spinner if we have something.
         if let cached = ParticipationCache.load(challengeID: challenge.id) {
             participations = cached

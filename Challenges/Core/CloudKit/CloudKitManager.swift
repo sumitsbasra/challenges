@@ -27,7 +27,19 @@ final class CloudKitManager: ObservableObject {
     // MARK: - User
 
     func saveUser(_ user: AppUser, avatarData: Data? = nil) async throws {
-        let record = RecordMapper.record(from: user)
+        // Fetch the existing record if it exists so we have the changeTag.
+        // Without it CloudKit rejects subsequent saves with serverRecordChanged.
+        let recordID = CKRecord.ID(recordName: user.id)
+        let record: CKRecord
+        if let existing = try? await publicDB.record(for: recordID) {
+            record = existing
+        } else {
+            record = CKRecord(recordType: RecordMapper.RecordType.user, recordID: recordID)
+        }
+        record["displayName"]   = user.displayName
+        record["appleUserID"]   = user.appleUserID
+        record["hasAppleWatch"] = user.hasAppleWatch ? 1 : 0
+
         var tmpURL: URL? = nil
         if let data = avatarData {
             let url = FileManager.default.temporaryDirectory
@@ -209,17 +221,37 @@ final class CloudKitManager: ObservableObject {
             }
         }
 
-        // Step 4: assemble Participation values using the lookup.
-        // If the user record isn't found (missing/not yet propagated), synthesise a
-        // minimal AppUser from the reference so the participation is never silently dropped.
+        // Step 4: for any user IDs missing from the batch (race condition / propagation
+        // delay), attempt individual fetches so we never fall back to "Participant".
+        let missingIDs = Set(partRecords.compactMap {
+            ($0["userRef"] as? CKRecord.Reference)?.recordID.recordName
+        }).subtracting(usersByID.keys)
+
+        var allUsers = usersByID
+        await withTaskGroup(of: (String, AppUser?).self) { group in
+            for id in missingIDs {
+                group.addTask {
+                    let rid = CKRecord.ID(recordName: id)
+                    let fetched = try? await self.publicDB.record(for: rid)
+                    let user = fetched.flatMap { RecordMapper.user(from: $0) }
+                    return (id, user)
+                }
+            }
+            for await (id, user) in group {
+                if let user { allUsers[id] = user }
+            }
+        }
+
+        // Step 5: assemble Participation values using the completed lookup.
+        // Only fall back to a placeholder if the user record truly doesn't exist yet.
         return partRecords.compactMap { record -> Participation? in
             guard let userRef = record["userRef"] as? CKRecord.Reference else { return nil }
             let userID = userRef.recordID.recordName
-            let user = usersByID[userID] ?? AppUser(
+            let user = allUsers[userID] ?? AppUser(
                 id: userID,
                 displayName: UserSession.shared.currentUser?.id == userID
                     ? (UserSession.shared.currentUser?.displayName ?? "Me")
-                    : "Participant",
+                    : "...",
                 appleUserID: "",
                 hasAppleWatch: false
             )

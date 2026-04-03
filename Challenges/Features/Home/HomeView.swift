@@ -47,6 +47,22 @@ final class HomeViewModel {
 
     private let ck = CloudKitManager.shared
 
+    // MARK: - Init
+
+    init() {
+        // Pre-populate from cache so the very first SwiftUI frame already has data.
+        // Without this, the view renders with empty arrays, shows "No challenges yet"
+        // for a visible moment, then replaces it once .task fires and reads the cache.
+        // Reading from UserDefaults/disk here is synchronous and fast (<1 ms).
+        guard let userID = UserSession.shared.userID,
+              let cached = ChallengeCache.load(userID: userID) else { return }
+        allChallenges       = cached.challenges
+        activeItems         = cached.activeItems
+        completedItems      = cached.completedItems
+        upcomingChallenges  = cached.challenges.filter { $0.status == .pending }
+        completedChallenges = cached.challenges.filter { $0.status == .completed }
+    }
+
     // MARK: - Load
 
     @MainActor
@@ -102,6 +118,29 @@ final class HomeViewModel {
                     stepsPct: 0, activeEnergyPct: 0,
                     syncSource: .watch
                 )
+            } else {
+                // Activity summary not yet available for today (common early in the morning
+                // before the first workout event triggers a Watch sync). Fall back to
+                // individual HealthKit queries, which are populated even without a summary.
+                async let energyTask   = fetcher.activeEnergy(on: today)
+                async let exerciseTask = fetcher.exerciseMinutes(on: today)
+                async let standTask    = fetcher.standHours(on: today)
+                let (e, ex, st) = await (energyTask, exerciseTask, standTask)
+
+                let goalMoveVal = await GoalResolver().moveGoal()
+                activeEnergy    = e
+                exerciseMinutes = ex
+                standHours      = st
+                self.moveGoal     = max(goalMoveVal, 1)
+                self.exerciseGoal = 30
+                self.standGoal    = 12
+                ringData = RingData(
+                    moveRingPct:     goalMoveVal > 0 ? e  / goalMoveVal : 0,
+                    exerciseRingPct: ex / 30,
+                    standRingPct:    st / 12,
+                    stepsPct: 0, activeEnergyPct: 0,
+                    syncSource: .watch
+                )
             }
         } else {
             async let stepsTask  = fetcher.steps(on: today)
@@ -127,12 +166,16 @@ final class HomeViewModel {
 
     @MainActor
     func loadChallenges(userID: String) async {
-        // Populate from cache immediately — no spinner if we have data.
-        if let cached = ChallengeCache.load(userID: userID) {
-            // Apply local status transitions to cached data so the badge text is
-            // correct even before the network fetch completes.
+        // If we already have data (pre-populated by init or a previous load), show the
+        // subtle refresh indicator rather than a blank loading state.
+        // If this is a first launch with no cache, show the full loading indicator.
+        if !activeItems.isEmpty || !upcomingChallenges.isEmpty {
+            isRefreshingChallenges = true
+        } else if let cached = ChallengeCache.load(userID: userID) {
+            // Cache exists but init() didn't run for this userID (e.g. account switch).
+            // Apply local status transitions so badge text is correct before network fetch.
             let locallyTransitioned = applyLocalTransitions(cached.challenges, fireCloudKit: false)
-            applyAll(locallyTransitioned, activeItems: cached.activeItems, completedItems: [])
+            applyAll(locallyTransitioned, activeItems: cached.activeItems, completedItems: cached.completedItems)
             isRefreshingChallenges = true
         } else {
             isLoadingChallenges = true
@@ -148,11 +191,17 @@ final class HomeViewModel {
             // Immediately transition any challenges whose window has opened or closed,
             // and fire CloudKit updates in the background so other clients see the change.
             let all = applyLocalTransitions(fetched, fireCloudKit: true)
-            var seenIDs = Set<String>([userID])
-            let active    = try await buildRankedItems(from: all, status: .active,    userID: userID, seenIDs: &seenIDs)
-            let completed = try await buildRankedItems(from: all, status: .completed, userID: userID, seenIDs: &seenIDs)
+            // Run both builds concurrently — each fetches a disjoint set of challenges.
+            async let activeBuild   = buildRankedItems(from: all, status: .active,    userID: userID)
+            async let completedBuild = buildRankedItems(from: all, status: .completed, userID: userID)
+            let (activeResult, completedResult) = await (activeBuild, completedBuild)
+            let active    = activeResult.items
+            let completed = completedResult.items
+            let seenIDs   = Set([userID])
+                .union(activeResult.participantIDs)
+                .union(completedResult.participantIDs)
             applyAll(all, activeItems: active, completedItems: completed)
-            ChallengeCache.save(challenges: all, activeItems: active, userID: userID)
+            ChallengeCache.save(challenges: all, activeItems: active, completedItems: completed, userID: userID)
             // Prune avatars for users no longer in any of our challenges.
             Task.detached { AvatarCache.pruneStale(keepingUserIDs: seenIDs) }
             SpotlightIndexer.index(all)
@@ -228,6 +277,33 @@ final class HomeViewModel {
         return result
     }
 
+    /// Patches today's points and total points on active home cards using freshly synced
+    /// HealthKit scores. Called after `syncCurrentChallenges` so the cards never show
+    /// stale "+0 today" values caused by CloudKit read-after-write latency.
+    @MainActor
+    func applySyncedScores(_ syncedScores: [String: [DailyScore]]) {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        activeItems = activeItems.map { item in
+            guard let scores = syncedScores[item.id] else { return item }
+            let todayPts = scores
+                .first(where: { cal.isDateInToday($0.date) })?.points ?? item.todayPoints
+            // Recompute total from the full merged score set (deduped by day).
+            var best: [Date: Double] = [:]
+            for score in scores {
+                let day = cal.startOfDay(for: score.date)
+                guard day <= today else { continue }
+                best[day] = max(best[day] ?? 0, score.points)
+            }
+            let totalPts = best.values.reduce(0, +)
+            return TodayItem(
+                id: item.id, challenge: item.challenge,
+                rank: item.rank, participantCount: item.participantCount,
+                todayPoints: todayPts, totalPoints: totalPts
+            )
+        }
+    }
+
     /// Returns a new TodayItem with the challenge mutated by `modify`, or the original if IDs don't match.
     private func patchItem(_ item: TodayItem, id: String, modify: (inout Challenge) -> Void) -> TodayItem {
         guard item.id == id else { return item }
@@ -242,38 +318,45 @@ final class HomeViewModel {
 
     @MainActor
     private func buildRankedItems(from all: [Challenge], status: ChallengeStatus,
-                                  userID: String,
-                                  seenIDs: inout Set<String>) async throws -> [TodayItem] {
+                                  userID: String) async -> (items: [TodayItem], participantIDs: Set<String>) {
         let challenges = all.filter { $0.status == status }
         var items: [TodayItem] = []
+        var participantIDs = Set<String>()
         for challenge in challenges {
-            var parts  = try await ck.fetchParticipations(challengeID: challenge.id)
-            let scores = try await ck.fetchDailyScores(challengeID: challenge.id)
+            do {
+                // Fetch participations and scores concurrently — no dependency between them.
+                async let partsTask  = ck.fetchParticipations(challengeID: challenge.id)
+                async let scoresTask = ck.fetchDailyScores(challengeID: challenge.id)
+                var (parts, scores) = try await (partsTask, scoresTask)
 
-            for i in parts.indices {
-                parts[i].dailyScores = scores
-                    .filter  { $0.participationID == parts[i].id }
-                    .sorted  { $0.date < $1.date }
+                for i in parts.indices {
+                    parts[i].dailyScores = scores
+                        .filter  { $0.participationID == parts[i].id }
+                        .sorted  { $0.date < $1.date }
+                }
+
+                let ranked = ScoreAggregator.ranked(parts)
+                // Collect every participant's user ID so we can prune stale avatar files.
+                participantIDs.formUnion(ranked.map { $0.user.id })
+                guard let mine = ranked.first(where: { $0.user.id == userID }) else { continue }
+
+                let todayPts = mine.dailyScores
+                    .first(where: { Calendar.current.isDateInToday($0.date) })?.points ?? 0
+
+                items.append(TodayItem(
+                    id:               challenge.id,
+                    challenge:        challenge,
+                    rank:             mine.rank,
+                    participantCount: ranked.count,
+                    todayPoints:      todayPts,
+                    totalPoints:      mine.totalPoints
+                ))
+            } catch {
+                // One failed challenge fetch should not block the rest from loading.
+                continue
             }
-
-            let ranked = ScoreAggregator.ranked(parts)
-            // Collect every participant's user ID so we can prune stale avatar files.
-            seenIDs.formUnion(ranked.map { $0.user.id })
-            guard let mine = ranked.first(where: { $0.user.id == userID }) else { continue }
-
-            let todayPts = mine.dailyScores
-                .first(where: { Calendar.current.isDateInToday($0.date) })?.points ?? 0
-
-            items.append(TodayItem(
-                id:               challenge.id,
-                challenge:        challenge,
-                rank:             mine.rank,
-                participantCount: ranked.count,
-                todayPoints:      todayPts,
-                totalPoints:      mine.totalPoints
-            ))
         }
-        return items
+        return (items, participantIDs)
     }
 }
 
@@ -348,8 +431,10 @@ struct HomeView: View {
                 try? await CloudKitManager.shared.saveUser(user)
             }
             await vm.load(userID: userID)
-            // Kick off background work once data is loaded.
-            await SyncCoordinator.shared.syncCurrentChallenges()
+            // Sync today's HealthKit data and immediately patch the home cards so
+            // "today pts" reflects the real value rather than stale CloudKit data.
+            let synced = await SyncCoordinator.shared.syncCurrentChallenges()
+            vm.applySyncedScores(synced)
             BackgroundTaskScheduler.scheduleAppRefresh()
             Task { await NotificationScheduler.reschedule(for: vm.allChallenges) }
             let activeIDs = vm.allChallenges.filter { $0.status == .active }.map { $0.id }
@@ -358,6 +443,8 @@ struct HomeView: View {
         .refreshable {
             guard let userID = session.userID else { return }
             await vm.load(userID: userID)
+            let synced = await SyncCoordinator.shared.syncCurrentChallenges()
+            vm.applySyncedScores(synced)
         }
         .tint(.white)
         .onOpenURL { url in
@@ -380,6 +467,21 @@ struct HomeView: View {
                 guard let userID = session.userID else { return }
                 await vm.load(userID: userID)
             }
+        }
+        // Refresh points + rank on the cards whenever scores change in CloudKit
+        // (e.g. another participant's push arrives while the home screen is visible).
+        .onReceive(NotificationCenter.default.publisher(for: .dailyScoreDidUpdate)) { _ in
+            Task {
+                guard let userID = session.userID else { return }
+                await vm.loadChallenges(userID: userID)
+            }
+        }
+        // Refresh points + rank when the user pops back from a challenge detail view.
+        // The detail view syncs HealthKit → CloudKit on open, so the scores in CloudKit
+        // are fresh by the time the user navigates back here.
+        .onChange(of: navigationPath) { _, newPath in
+            guard newPath.isEmpty, let userID = session.userID else { return }
+            Task { await vm.loadChallenges(userID: userID) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openChallenge)) { note in
             guard let id = note.userInfo?["challengeID"] as? String else { return }
@@ -868,7 +970,7 @@ private enum CardPreviewData {
     static func challenge(title: String, status: ChallengeStatus, start: Date, end: Date) -> Challenge {
         Challenge(id: UUID().uuidString, title: title, creatorID: "me",
                   startDate: start, endDate: end, status: status,
-                  inviteCode: "ABC123", maxParticipants: 20, createdAt: now)
+                  inviteCode: "ABC123", createdAt: now)
     }
 
     static func active1Item(rank: Int, today: Double, total: Double, daysLeft: Int) -> TodayItem {
@@ -950,7 +1052,7 @@ extension HomeViewModel {
             Challenge(id: UUID().uuidString, title: title, creatorID: "mock-me",
                       startDate: date(start), endDate: date(end),
                       status: status, inviteCode: "MOCK01",
-                      maxParticipants: 10, createdAt: now)
+                      createdAt: now)
         }
 
         func makeItem(_ c: Challenge, rank: Int, participants: Int, today: Double, total: Double) -> TodayItem {

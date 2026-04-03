@@ -10,7 +10,7 @@ struct DailyBreakdownView: View {
 
     private var allDays: [(date: Date, score: DailyScore?)] {
         (0..<7).map { offset in
-            let day = Calendar.current.date(byAdding: .day, value: offset, to: challengeStartDate)!
+            let day = Calendar.current.date(byAdding: .day, value: offset, to: challengeStartDate) ?? challengeStartDate
             let score = participation.dailyScores.first {
                 Calendar.current.isDate($0.date, inSameDayAs: day)
             }

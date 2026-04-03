@@ -117,11 +117,12 @@ final class CloudKitManager: ObservableObject {
         let createQuery = CKQuery(recordType: RecordMapper.RecordType.challenge,
                                   predicate: NSPredicate(format: "creatorRef == %@", userRef))
 
-        let challenges = try await fetchAllRecords(matching: createQuery)
-            .compactMap(RecordMapper.challenge)
+        // Run both queries concurrently — no dependency between them.
+        async let ownedTask  = fetchAllRecords(matching: createQuery)
+        async let joinedTask = fetchJoinedChallenges(userID: userID)
+        let (ownedRecords, joinedChallenges) = try await (ownedTask, joinedTask)
 
-        let joinedChallenges = try await fetchJoinedChallenges(userID: userID)
-
+        let challenges = ownedRecords.compactMap(RecordMapper.challenge)
         var seen = Set<String>()
         return (challenges + joinedChallenges).filter { seen.insert($0.id).inserted }
     }
@@ -187,7 +188,22 @@ final class CloudKitManager: ObservableObject {
 
     func saveParticipation(_ participation: Participation) async throws {
         let record = RecordMapper.record(from: participation)
-        _ = try await publicDB.save(record)
+        // Use CKModifyRecordsOperation with savePolicy: .allKeys (upsert semantics) instead
+        // of publicDB.save(), which uses .ifServerRecordUnchanged. On a retry after a dropped
+        // network response the record may already exist on the server with a non-nil changeTag,
+        // causing publicDB.save to fail with serverRecordChanged even though the data is ours.
+        let operation = CKModifyRecordsOperation(recordsToSave: [record], recordIDsToDelete: nil)
+        operation.savePolicy = .allKeys
+        operation.isAtomic = true
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            operation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success: continuation.resume()
+                case .failure(let error): continuation.resume(throwing: error)
+                }
+            }
+            publicDB.add(operation)
+        }
     }
 
     /// Backfills the `displayName` field on an existing participation record if it

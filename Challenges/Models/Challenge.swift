@@ -12,7 +12,6 @@ struct Challenge: Identifiable, Codable, Hashable {
     var endDate: Date
     var status: ChallengeStatus
     var inviteCode: String      // 6-char alphanumeric, e.g. "FX4K9R"
-    var maxParticipants: Int    // 2–20
     var createdAt: Date
 
     var isOwned: Bool = false   // transient, set by the app after fetch

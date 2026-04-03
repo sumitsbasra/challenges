@@ -164,8 +164,8 @@ struct NewChallengeView: View {
                     .onChange(of: vm.startDate) { _, newStart in
                         // Defer end-date clamp so it doesn't conflict with
                         // the picker's own update cycle
-                        let minEnd = Calendar.current.date(byAdding: .day, value: 1, to: newStart)!
-                        if vm.endDate < minEnd {
+                        if let minEnd = Calendar.current.date(byAdding: .day, value: 1, to: newStart),
+                           vm.endDate < minEnd {
                             DispatchQueue.main.async { vm.endDate = minEnd }
                         }
                     }

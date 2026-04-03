@@ -6,8 +6,8 @@ extension Date {
 
     /// Returns the end of the calendar day (start of next day minus 1 second).
     var endOfDay: Date {
-        Calendar.current.date(byAdding: .second, value: -1,
-                              to: Calendar.current.date(byAdding: .day, value: 1, to: startOfDay)!)!
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        return Calendar.current.date(byAdding: .second, value: -1, to: tomorrow) ?? tomorrow
     }
 
     /// True if this date is within the competition window [start, end].

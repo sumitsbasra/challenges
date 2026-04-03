@@ -60,10 +60,10 @@ struct RankTimelineProvider: TimelineProvider {
         var components = Calendar.current.dateComponents([.year, .month, .day], from: .now)
         components.hour = hour
         components.minute = minute
-        let candidate = Calendar.current.date(from: components)!
+        guard let candidate = Calendar.current.date(from: components) else { return .now }
         return candidate > .now
             ? candidate
-            : Calendar.current.date(byAdding: .day, value: 1, to: candidate)!
+            : Calendar.current.date(byAdding: .day, value: 1, to: candidate) ?? candidate
     }
 }
 
@@ -88,7 +88,7 @@ struct ChallengesRankWidget: Widget {
 /// Reads WidgetState from the shared App Group UserDefaults.
 /// The main app writes this via WidgetDataWriter after each sync.
 private enum WidgetDataStore {
-    private static let suiteName = "group.com.yourname.challenges"
+    private static let suiteName = "group.studio.ssb.challenges"
     private static let key = "widgetState"
 
     static func read() -> WidgetState? {

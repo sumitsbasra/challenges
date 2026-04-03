@@ -18,7 +18,13 @@ actor ActivityDataFetcher {
             let calendar = Calendar.current
             var start = calendar.dateComponents([.year, .month, .day], from: startDate)
             start.calendar = calendar
-            var end = calendar.dateComponents([.year, .month, .day], from: endDate)
+
+            // HKActivitySummaryQuery treats the end DateComponents as EXCLUSIVE,
+            // so bump it forward one day to make the requested endDate inclusive.
+            // e.g. querying "today → today" would otherwise return nothing.
+            let endPlusOne = calendar.date(byAdding: .day, value: 1, to:
+                calendar.startOfDay(for: endDate)) ?? endDate
+            var end = calendar.dateComponents([.year, .month, .day], from: endPlusOne)
             end.calendar = calendar
             let predicate = HKQuery.predicate(forActivitySummariesBetweenStart: start, end: end)
 
@@ -33,6 +39,12 @@ actor ActivityDataFetcher {
             }
             store.execute(query)
         }
+    }
+
+    /// Returns the HKActivitySummary for a single calendar day, or nil if unavailable.
+    func activitySummary(on date: Date) async -> HKActivitySummary? {
+        let summaries = await activitySummaries(from: date, to: date)
+        return summaries[Calendar.current.startOfDay(for: date)]
     }
 
     // MARK: - Steps
@@ -55,6 +67,32 @@ actor ActivityDataFetcher {
             unit: .meter(),
             on: date
         )
+    }
+
+    // MARK: - Stand hours (Watch path)
+
+    /// Returns the number of stand-hours credited for the given calendar day.
+    /// Counts HKCategoryType(.appleStandHour) samples where value == .stood.
+    func standHours(on date: Date) async -> Double {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: date)
+        let end   = calendar.date(byAdding: .day, value: 1, to: start) ?? Date(timeInterval: 86400, since: start)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: HKCategoryType(.appleStandHour),
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: nil
+            ) { _, samples, _ in
+                let count = (samples as? [HKCategorySample])?
+                    .filter { $0.value == HKCategoryValueAppleStandHour.stood.rawValue }
+                    .count ?? 0
+                continuation.resume(returning: Double(count))
+            }
+            store.execute(query)
+        }
     }
 
     // MARK: - Active energy (non-Watch path)

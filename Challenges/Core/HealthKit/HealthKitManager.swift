@@ -25,6 +25,7 @@ final class HealthKitManager: ObservableObject {
             HKQuantityType(.activeEnergyBurned),
             HKQuantityType(.stepCount),
             HKQuantityType(.appleExerciseTime),
+            HKQuantityType(.distanceWalkingRunning),
 
             // Watch-specific (gracefully absent on non-Watch)
             HKCategoryType(.appleStandHour),

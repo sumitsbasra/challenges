@@ -14,11 +14,13 @@ final class ProfileViewModel {
 
     private let ck = CloudKitManager.shared
     private var userID: String = ""
+    private var originalDisplayName: String = ""
 
     @MainActor
     func load(user: AppUser) {
         userID = user.id
         displayName = user.displayName
+        originalDisplayName = user.displayName
         hasAppleWatch = user.hasAppleWatch
         profilePhoto = AvatarCache.load(userID: user.id)
     }
@@ -43,11 +45,15 @@ final class ProfileViewModel {
 
     @MainActor
     func save(user: AppUser) async {
+        let trimmed = displayName.trimmingCharacters(in: .whitespaces)
+        // Skip the CloudKit write if nothing actually changed.
+        guard !trimmed.isEmpty, trimmed != originalDisplayName else { return }
         isSaving = true
         defer { isSaving = false }
         var updated = user
-        updated.displayName = displayName.trimmingCharacters(in: .whitespaces)
-        UserDefaults.standard.set(updated.displayName, forKey: "displayName")
+        updated.displayName = trimmed
+        UserDefaults.standard.set(trimmed, forKey: "displayName")
+        originalDisplayName = trimmed
         do {
             try await ck.saveUser(updated)
             UserSession.shared.update(user: updated)

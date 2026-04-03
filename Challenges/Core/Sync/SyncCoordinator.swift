@@ -20,14 +20,20 @@ actor SyncCoordinator {
     // MARK: - Public API
 
     /// Sync a single challenge — used by the detail view to get fresh scores on open.
-    func syncChallenge(_ challenge: Challenge) async {
-        guard let userID = UserSession.shared.userID else { return }
-        await syncChallenge(challenge, userID: userID)
+    /// Returns the current user's full score set (existing + freshly computed) so the
+    /// caller can inject them directly without a follow-up CloudKit fetch.
+    @discardableResult
+    func syncChallenge(_ challenge: Challenge) async -> [DailyScore] {
+        guard let userID = UserSession.shared.userID else { return [] }
+        return await syncChallenge(challenge, userID: userID)
     }
 
     /// Sync all active challenges for the current user.
-    func syncCurrentChallenges() async {
-        guard let userID = UserSession.shared.userID else { return }
+    /// Returns a map of challengeID → merged DailyScores (existing + freshly computed)
+    /// so the caller can update its UI without a follow-up CloudKit fetch.
+    @discardableResult
+    func syncCurrentChallenges() async -> [String: [DailyScore]] {
+        guard let userID = UserSession.shared.userID else { return [:] }
         let ck = await MainActor.run { CloudKitManager.shared }
 
         do {
@@ -35,28 +41,43 @@ actor SyncCoordinator {
             let active = allChallenges.filter { $0.status == .active }
             await transitionPendingChallenges(allChallenges)
 
-            for challenge in active {
-                await syncChallenge(challenge, userID: userID)
+            // Sync all active challenges concurrently and collect results.
+            var results: [String: [DailyScore]] = [:]
+            await withTaskGroup(of: (String, [DailyScore]).self) { group in
+                for challenge in active {
+                    group.addTask {
+                        (challenge.id, await self.syncChallenge(challenge, userID: userID))
+                    }
+                }
+                for await (id, scores) in group {
+                    results[id] = scores
+                }
             }
 
             await updateWidgetState(userID: userID, activeChallenges: active)
+            return results
         } catch {
             #if DEBUG
             print("[SyncCoordinator] Failed to fetch challenges: \(error)")
             #endif
+            return [:]
         }
     }
 
     // MARK: - Per-challenge sync
 
-    private func syncChallenge(_ challenge: Challenge, userID: String) async {
+    private func syncChallenge(_ challenge: Challenge, userID: String) async -> [DailyScore] {
         let ck = await MainActor.run { CloudKitManager.shared }
         // Find the current user's participation record.
         guard let participation = try? await ck.fetchParticipations(challengeID: challenge.id)
             .first(where: { $0.user.id == userID && $0.status == .active })
-        else { return }
+        else { return [] }
 
-        let hasWatch = participation.hasAppleWatch
+        // Use the live Watch status from UserDefaults — this is updated by WatchDetector
+        // on every home screen load and matches what the home screen activity card shows.
+        // participation.hasAppleWatch was stamped at join time and may be stale (e.g. the
+        // user paired a Watch after joining, or HealthKit auth ran before Watch detection).
+        let hasWatch = UserDefaults.standard.bool(forKey: "hasAppleWatch")
 
         // Backfill the display name onto the participation record so that other
         // participants can show this user's name even if the Users record is
@@ -87,76 +108,115 @@ actor SyncCoordinator {
             day = nextDay
         }
 
-        // Fetch activity data and compute scores concurrently per day.
+        // Determine which days actually need a HealthKit → CloudKit sync.
+        //
+        // Past days with a non-zero score already in CloudKit are left untouched.
+        // Re-querying HealthKit for a past day can return 0 if the Watch hasn't
+        // re-pushed that day's summary to the iPhone yet (e.g. first sync in the
+        // morning), which would overwrite correct historical data with zeros.
+        //
+        // Rules:
+        //   • Today  → always sync (activity is still accumulating).
+        //   • Past day, no CloudKit record → sync (backfill for new joiners / first open).
+        //   • Past day, CloudKit record with 0 pts → sync (may have been incomplete).
+        //   • Past day, CloudKit record with pts > 0 → skip (trust the stored value).
+        let existingScores = (try? await ck.fetchDailyScores(participationID: participation.id)) ?? []
+        let existingByID = Dictionary(existingScores.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+
+        let daysToSync = days.filter { day in
+            guard !calendar.isDateInToday(day) else { return true }   // always sync today
+            let scoreID = DailyScore.makeID(participationID: participation.id, date: day)
+            return existingByID[scoreID].map { $0.points == 0 } ?? true  // missing or zero → sync
+        }
+
+        guard !daysToSync.isEmpty else { return existingScores }
+
+        // Fetch activity data and compute scores for each day.
+        //
+        // We always use individual HKStatisticsQuery / HKSampleQuery calls regardless
+        // of whether the user has a Watch. The Apple Watch writes both individual
+        // quantity/category samples AND consolidated HKActivitySummary objects to
+        // HealthKit — individual samples sync to iPhone within minutes of activity,
+        // making them faster and more reliable than waiting for the consolidated summary.
+        //
+        // Watch vs. non-Watch only affects the *scoring model*:
+        //   Watch   → calculateWatch  (Move/Exercise/Stand rings, personalized move goal)
+        //   no Watch → calculateNonWatch (Steps + Active Energy + Exercise)
+        let goalResolver = GoalResolver()
+        // Fetch the Watch move goal once, outside the day loop — it's the same for all days.
+        let moveGoal: Double = hasWatch ? await goalResolver.moveGoal() : 0
+
         var scores: [DailyScore] = []
 
-        if hasWatch {
-            let summaries = await fetcher.activitySummaries(from: startDay, to: endDay)
-            let goalResolver = GoalResolver()
-            let moveGoal = await goalResolver.moveGoal()
+        for day in daysToSync {
+            async let stepsTask    = fetcher.steps(on: day)
+            async let energyTask   = fetcher.activeEnergy(on: day)
+            async let exerciseTask = fetcher.exerciseMinutes(on: day)
+            async let standTask    = fetcher.standHours(on: day)
+            async let distanceTask = fetcher.distanceMeters(on: day)
+            let (steps, energy, exercise, stand, distance) =
+                await (stepsTask, energyTask, exerciseTask, standTask, distanceTask)
 
-            for day in days {
-                let summary = summaries[day]
-                let moveCalories = summary?.activeEnergyBurned.doubleValue(for: .kilocalorie()) ?? 0
-                let exerciseMins = summary?.appleExerciseTime.doubleValue(for: .minute()) ?? 0
-                let standHours   = summary?.appleStandHours.doubleValue(for: .count()) ?? 0
+            var points: Double
+            var ringData: RingData
+            if hasWatch {
+                // For past days, also try HKActivitySummary — it stores the Watch's
+                // consolidated daily record and often has data when individual samples
+                // haven't yet synced from Watch to iPhone (e.g. after a restore or
+                // re-install). It also carries the personalized move goal for that
+                // specific historical day, which may differ from today's goal.
+                let isPastDay = !calendar.isDateInToday(day)
+                let summaryEnergy:   Double
+                let summaryExercise: Double
+                let summaryStand:    Double
+                let summaryMoveGoal: Double
 
-                async let stepsTask    = fetcher.steps(on: day)
-                async let distanceTask = fetcher.distanceMeters(on: day)
-                let (steps, distance)  = await (stepsTask, distanceTask)
+                if isPastDay, let summary = await fetcher.activitySummary(on: day) {
+                    summaryEnergy   = summary.activeEnergyBurned.doubleValue(for: .kilocalorie())
+                    summaryExercise = summary.appleExerciseTime.doubleValue(for: .minute())
+                    summaryStand    = summary.appleStandHours.doubleValue(for: .count())
+                    summaryMoveGoal = summary.activeEnergyBurnedGoal.doubleValue(for: .kilocalorie())
+                } else {
+                    summaryEnergy   = 0
+                    summaryExercise = 0
+                    summaryStand    = 0
+                    summaryMoveGoal = 0
+                }
 
-                var (points, ringData) = PointsCalculator.calculateWatch(
-                    moveCalories: moveCalories, moveGoal: moveGoal,
-                    exerciseMinutes: exerciseMins,
-                    standHours: standHours
+                // Prefer individual-query values; fall back to summary when individual is 0.
+                // Individual queries are more real-time for today; summaries are more
+                // reliable for historical days where samples may not have synced yet.
+                let effectiveEnergy   = energy   > 0 ? energy   : summaryEnergy
+                let effectiveExercise = exercise > 0 ? exercise : summaryExercise
+                let effectiveStand    = stand    > 0 ? stand    : summaryStand
+                let effectiveMoveGoal = summaryMoveGoal > 0 ? summaryMoveGoal : moveGoal
+
+                (points, ringData) = PointsCalculator.calculateWatch(
+                    moveCalories: effectiveEnergy, moveGoal: effectiveMoveGoal,
+                    exerciseMinutes: effectiveExercise,
+                    standHours: effectiveStand
                 )
-                ringData.totalSteps     = steps
-                ringData.distanceMeters = distance
-
-                let noonUTC = DailyScore.noonUTC(for: day)
-                let scoreID = DailyScore.makeID(participationID: participation.id, date: day)
-                scores.append(DailyScore(
-                    id: scoreID,
-                    participationID: participation.id,
-                    challengeID: challenge.id,
-                    date: noonUTC,
-                    points: points,
-                    ringData: ringData,
-                    lastSyncedAt: Date()
-                ))
-            }
-        } else {
-            let goalResolver = GoalResolver()
-
-            for day in days {
-                async let stepsTask    = fetcher.steps(on: day)
-                async let energyTask   = fetcher.activeEnergy(on: day)
-                async let exerciseTask = fetcher.exerciseMinutes(on: day)
-                async let distanceTask = fetcher.distanceMeters(on: day)
-                let (steps, energy, exercise, distance) = await (stepsTask, energyTask, exerciseTask, distanceTask)
-
-                let stepsGoal    = goalResolver.stepsGoal
-                let energyGoal   = goalResolver.activeEnergyGoal
-                var (points, ringData) = PointsCalculator.calculateNonWatch(
-                    steps: steps, stepsGoal: stepsGoal,
-                    activeEnergy: energy, activeEnergyGoal: energyGoal,
+            } else {
+                (points, ringData) = PointsCalculator.calculateNonWatch(
+                    steps: steps, stepsGoal: goalResolver.stepsGoal,
+                    activeEnergy: energy, activeEnergyGoal: goalResolver.activeEnergyGoal,
                     exerciseMinutes: exercise
                 )
-                ringData.totalSteps     = steps
-                ringData.distanceMeters = distance
-
-                let noonUTC = DailyScore.noonUTC(for: day)
-                let scoreID = DailyScore.makeID(participationID: participation.id, date: day)
-                scores.append(DailyScore(
-                    id: scoreID,
-                    participationID: participation.id,
-                    challengeID: challenge.id,
-                    date: noonUTC,
-                    points: points,
-                    ringData: ringData,
-                    lastSyncedAt: Date()
-                ))
             }
+            ringData.totalSteps     = steps
+            ringData.distanceMeters = distance
+
+            let noonUTC = DailyScore.noonUTC(for: day)
+            let scoreID = DailyScore.makeID(participationID: participation.id, date: day)
+            scores.append(DailyScore(
+                id: scoreID,
+                participationID: participation.id,
+                challengeID: challenge.id,
+                date: noonUTC,
+                points: points,
+                ringData: ringData,
+                lastSyncedAt: Date()
+            ))
         }
 
         // Batch upsert to CloudKit.
@@ -167,6 +227,15 @@ actor SyncCoordinator {
             print("[SyncCoordinator] Failed to save scores for challenge \(challenge.id): \(error)")
             #endif
         }
+
+        // Return the full picture: preserved existing scores (pts > 0, not re-synced)
+        // merged with the freshly computed ones. The caller can inject these directly
+        // into the UI without a follow-up CloudKit fetch, which is important because
+        // CloudKit read-after-write consistency is not guaranteed — a fetch immediately
+        // after a save may miss the new records.
+        let resyncedIDs = Set(scores.map { $0.id })
+        let preserved   = existingScores.filter { !resyncedIDs.contains($0.id) }
+        return preserved + scores
     }
 
     // MARK: - Challenge lifecycle transitions

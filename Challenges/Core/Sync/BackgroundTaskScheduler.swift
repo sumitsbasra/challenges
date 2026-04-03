@@ -28,6 +28,10 @@ enum BackgroundTaskScheduler {
 
         let syncTask = Task {
             await SyncCoordinator.shared.syncCurrentChallenges()
+            // Guard against double-completion: if the expiration handler already fired
+            // and cancelled this Task, skip the success callback to avoid calling
+            // setTaskCompleted twice (which logs a BGTask warning).
+            guard !Task.isCancelled else { return }
             task.setTaskCompleted(success: true)
         }
 

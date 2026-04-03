@@ -22,8 +22,6 @@ final class NewChallengeViewModel {
         comps.hour = 23; comps.minute = 59; comps.second = 59
         return Calendar.current.date(from: comps) ?? date
     }
-    var maxParticipants: Int = 50
-
     var durationDays: Int {
         max(1, (Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0) + 1)
     }
@@ -52,7 +50,6 @@ final class NewChallengeViewModel {
             endDate: NewChallengeViewModel.endOfDay(endDate),
             status: .pending,
             inviteCode: inviteCode,
-            maxParticipants: maxParticipants,
             createdAt: Date()
         )
 

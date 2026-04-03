@@ -7,6 +7,7 @@ struct ChallengeCache {
     private struct Payload: Codable {
         var allChallenges: [Challenge]
         var activeItems: [TodayItem]
+        var completedItems: [TodayItem] = []  // default keeps old cached payloads decodable
     }
 
     private static let encoder = JSONEncoder()
@@ -16,16 +17,16 @@ struct ChallengeCache {
         "challenge_cache_\(userID)"
     }
 
-    static func load(userID: String) -> (challenges: [Challenge], activeItems: [TodayItem])? {
+    static func load(userID: String) -> (challenges: [Challenge], activeItems: [TodayItem], completedItems: [TodayItem])? {
         guard
             let data = UserDefaults.standard.data(forKey: key(for: userID)),
             let payload = try? decoder.decode(Payload.self, from: data)
         else { return nil }
-        return (payload.allChallenges, payload.activeItems)
+        return (payload.allChallenges, payload.activeItems, payload.completedItems)
     }
 
-    static func save(challenges: [Challenge], activeItems: [TodayItem], userID: String) {
-        let payload = Payload(allChallenges: challenges, activeItems: activeItems)
+    static func save(challenges: [Challenge], activeItems: [TodayItem], completedItems: [TodayItem], userID: String) {
+        let payload = Payload(allChallenges: challenges, activeItems: activeItems, completedItems: completedItems)
         if let data = try? encoder.encode(payload) {
             UserDefaults.standard.set(data, forKey: key(for: userID))
         }

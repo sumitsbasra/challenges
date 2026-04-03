@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import CloudKit
+import HealthKit
 
 @MainActor
 @Observable
@@ -52,12 +53,8 @@ final class ChallengeDetailViewModel {
                 to:   cal.startOfDay(for: challenge.startDate)).day ?? 0
             return days == 0 ? "Starts today" : "Starts in \(days) day\(days == 1 ? "" : "s")"
         case .active:
-            if cal.isDateInToday(challenge.startDate) { return "Starts today" }
-            if cal.isDateInToday(challenge.endDate)   { return "Ends today" }
-            let daysToEnd = cal.dateComponents([.day],
-                from: cal.startOfDay(for: now),
-                to:   cal.startOfDay(for: challenge.endDate)).day ?? 0
-            if daysToEnd == 1 { return "Ends tomorrow" }
+            if cal.isDateInToday(challenge.endDate)    { return "Ends today" }
+            if cal.isDateInTomorrow(challenge.endDate) { return "Ends tomorrow" }
             return "Ongoing"
         case .completed:
             return "Completed"
@@ -105,11 +102,19 @@ final class ChallengeDetailViewModel {
 
         // Sync this challenge's scores first so CloudKit has the latest data
         // before we fetch — avoids showing stale/zero scores on first open.
+        // Capture the returned scores so we can inject them directly into the
+        // UI without relying on a CloudKit read-after-write (which may miss
+        // records that were just saved due to eventual consistency).
+        var mySyncedScores: [DailyScore] = []
         if challenge.status == .active {
-            await SyncCoordinator.shared.syncChallenge(challenge)
+            mySyncedScores = await SyncCoordinator.shared.syncChallenge(challenge)
         }
 
-        await fetchAndUpdate()
+        await fetchAndUpdate(syncedScores: mySyncedScores)
+
+        // Load everyone's scores so the leaderboard shows real pts on first open,
+        // not zeros (loadLeaderboard is otherwise only triggered by pull-to-refresh).
+        await loadLeaderboard()
 
         await CloudKitManager.shared.registerSubscriptions(forActiveChallengeIDs: [challenge.id])
 
@@ -125,7 +130,7 @@ final class ChallengeDetailViewModel {
     }
 
     @MainActor
-    private func fetchAndUpdate() async {
+    private func fetchAndUpdate(syncedScores: [DailyScore] = []) async {
         isLoading = participations.isEmpty  // spinner only when we have nothing to show
         error = nil
         defer { isLoading = false }
@@ -134,16 +139,43 @@ final class ChallengeDetailViewModel {
             var parts = try await ck.fetchParticipations(challengeID: challenge.id)
 
             let userID = UserSession.shared.userID ?? ""
-            if let myPart = parts.first(where: { $0.user.id == userID }) {
-                let myScores = try await ck.fetchDailyScores(participationID: myPart.id)
-                if let idx = parts.firstIndex(where: { $0.id == myPart.id }) {
-                    parts[idx].dailyScores = myScores.sorted { $0.date < $1.date }
+            if let myPart = parts.first(where: { $0.user.id == userID }),
+               let idx = parts.firstIndex(where: { $0.id == myPart.id }) {
+                // Start with what CloudKit returned.
+                var myScores = (try? await ck.fetchDailyScores(participationID: myPart.id)) ?? []
+
+                // Merge with scores returned directly from the sync. These were computed
+                // from HealthKit immediately before this fetch, so they are authoritative
+                // for any day they cover. CloudKit eventual consistency means the fetch
+                // above may not yet see records that were just saved — the direct sync
+                // results fill that gap.
+                for score in syncedScores {
+                    if let existing = myScores.firstIndex(where: {
+                        Calendar.current.isDate($0.date, inSameDayAs: score.date)
+                    }) {
+                        myScores[existing] = score  // prefer freshly computed
+                    } else {
+                        myScores.append(score)
+                    }
                 }
+
+                parts[idx].dailyScores = myScores.sorted { $0.date < $1.date }
             }
 
             participations = parts
             lastFetchDate = Date()
-            ParticipationCache.save(parts, challengeID: challenge.id)
+
+            // Overlay today's ring data with a live HealthKit read for the current user.
+            // CloudKit sync is async and may lag; this ensures the rings always show real
+            // data immediately — matching exactly what the home-screen Activity card shows.
+            if challenge.status == .active {
+                await overlayLiveHealthKitData()
+            }
+
+            // Save AFTER the overlay so the cache includes real ring values.
+            // On the next open the cached data shows instantly (non-zero rings)
+            // while the fresh overlay runs in the background.
+            ParticipationCache.save(participations, challengeID: challenge.id)
         } catch {
             let ck = error as? CKError
             if ck?.code == .networkUnavailable || ck?.code == .networkFailure {
@@ -151,6 +183,98 @@ final class ChallengeDetailViewModel {
             } else {
                 self.error = "Couldn't load. Pull down to try again."
             }
+        }
+    }
+
+    // MARK: - Live HealthKit overlay
+
+    /// Reads HealthKit directly for today and injects the result into the current user's
+    /// in-memory DailyScore so the rings always reflect live activity data, regardless of
+    /// whether the CloudKit sync has completed. Mirrors the logic in HomeViewModel.loadRings().
+    @MainActor
+    private func overlayLiveHealthKitData() async {
+        guard let userID = UserSession.shared.userID,
+              let myIdx = participations.firstIndex(where: { $0.user.id == userID })
+        else { return }
+
+        // Use the live Watch status from UserDefaults — the same source the home screen
+        // activity card uses, updated by WatchDetector on every home load.
+        // participation.hasAppleWatch was stamped at join time and can be stale
+        // (e.g. user paired a Watch after joining the challenge).
+        let hasWatch = UserDefaults.standard.bool(forKey: "hasAppleWatch")
+        let fetcher  = ActivityDataFetcher()
+        let today    = Date()
+        let cal      = Calendar.current
+
+        // Read all metrics via individual HKStatisticsQuery / HKSampleQuery calls.
+        // The Watch writes both individual samples and consolidated summaries to HealthKit;
+        // individual samples sync within minutes, so we get live data immediately without
+        // waiting for the Watch to push its end-of-day consolidated summary.
+        let goalResolver = GoalResolver()
+        async let stepsTask    = fetcher.steps(on: today)
+        async let energyTask   = fetcher.activeEnergy(on: today)
+        async let exerciseTask = fetcher.exerciseMinutes(on: today)
+        async let standTask    = fetcher.standHours(on: today)
+        async let distanceTask = fetcher.distanceMeters(on: today)
+        let (steps, energy, exercise, stand, distance) =
+            await (stepsTask, energyTask, exerciseTask, standTask, distanceTask)
+
+        var updatedRingData: RingData
+        var points: Double
+
+        if hasWatch {
+            let moveGoal = await goalResolver.moveGoal()
+            (points, updatedRingData) = PointsCalculator.calculateWatch(
+                moveCalories: energy, moveGoal: moveGoal,
+                exerciseMinutes: exercise,
+                standHours: stand
+            )
+        } else {
+            (points, updatedRingData) = PointsCalculator.calculateNonWatch(
+                steps: steps, stepsGoal: goalResolver.stepsGoal,
+                activeEnergy: energy, activeEnergyGoal: goalResolver.activeEnergyGoal,
+                exerciseMinutes: exercise
+            )
+        }
+        updatedRingData.totalSteps     = steps
+        updatedRingData.distanceMeters = distance
+
+        // Safety guard: if HealthKit returned all-zeros (Watch not yet synced, or
+        // authorization denied for individual types), keep the existing CloudKit data
+        // intact rather than clobbering valid scores with zeros.
+        let existingPoints = participations[myIdx].dailyScores.first(where: {
+            cal.isDate($0.date, inSameDayAs: today)
+        })?.points ?? 0
+        guard points > 0 || existingPoints == 0 else { return }
+
+        // Update the existing today score, or insert a new in-memory one.
+        let noonUTC = DailyScore.noonUTC(for: today)
+        if let scoreIdx = participations[myIdx].dailyScores.firstIndex(where: {
+            cal.isDate($0.date, inSameDayAs: today)
+        }) {
+            participations[myIdx].dailyScores[scoreIdx].ringData = updatedRingData
+            participations[myIdx].dailyScores[scoreIdx].points   = points
+        } else {
+            let newScore = DailyScore(
+                id: DailyScore.makeID(participationID: participations[myIdx].id, date: today),
+                participationID: participations[myIdx].id,
+                challengeID: challenge.id,
+                date: noonUTC,
+                points: points,
+                ringData: updatedRingData,
+                lastSyncedAt: today
+            )
+            participations[myIdx].dailyScores.append(newScore)
+        }
+
+        // Push the overlay result to CloudKit so the home screen's CloudKit-based
+        // refresh picks up the current score rather than the older sync snapshot.
+        // The sync only runs on detail open and captures activity at that moment;
+        // the overlay has fresher data and should win.
+        if let updated = participations[myIdx].dailyScores.first(where: {
+            cal.isDate($0.date, inSameDayAs: today)
+        }) {
+            Task { try? await CloudKitManager.shared.saveDailyScores([updated]) }
         }
     }
 
@@ -162,6 +286,10 @@ final class ChallengeDetailViewModel {
         // Only update if we now have a real record for ourselves
         if parts.contains(where: { $0.user.id == userID }) {
             participations = parts
+            if challenge.status == .active {
+                await overlayLiveHealthKitData()
+            }
+            ParticipationCache.save(participations, challengeID: challenge.id)
         }
     }
 
@@ -176,14 +304,41 @@ final class ChallengeDetailViewModel {
         defer { isLoadingLeaderboard = false }
 
         do {
+            let myUserID  = UserSession.shared.userID ?? ""
             let allScores = try await ck.fetchDailyScores(challengeID: challenge.id)
             for i in participations.indices {
-                participations[i].dailyScores = allScores
+                let ckScores = allScores
                     .filter { $0.participationID == participations[i].id }
                     .sorted { $0.date < $1.date }
+
+                if participations[i].user.id == myUserID {
+                    // For the current user, prefer the scores already in-memory: they were
+                    // fetched immediately after syncChallenge wrote them to CloudKit, so they
+                    // are more up-to-date than this leaderboard fetch which may hit a replica
+                    // that hasn't yet seen the write (CloudKit eventual consistency).
+                    // Merge: add any scores CloudKit has that we don't (other devices), but
+                    // keep our version for any day we already have data for.
+                    var merged = participations[i].dailyScores
+                    for ckScore in ckScores {
+                        let alreadyHave = merged.contains {
+                            Calendar.current.isDate($0.date, inSameDayAs: ckScore.date)
+                        }
+                        if !alreadyHave { merged.append(ckScore) }
+                    }
+                    participations[i].dailyScores = merged.sorted { $0.date < $1.date }
+                } else {
+                    participations[i].dailyScores = ckScores
+                }
             }
             leaderboardLoaded = true
             lastFetchDate = Date()
+
+            // Re-apply the live HealthKit overlay to ensure today's rings are correct,
+            // then persist so the cache has real ring values for the next open.
+            if challenge.status == .active {
+                await overlayLiveHealthKitData()
+            }
+            ParticipationCache.save(participations, challengeID: challenge.id)
         } catch {
             // Non-fatal — partial data is better than nothing; user can pull-to-refresh.
             self.error = "Couldn't load leaderboard. Pull down to try again."
@@ -195,7 +350,11 @@ final class ChallengeDetailViewModel {
     @MainActor
     func refresh() async {
         leaderboardLoaded = false
-        await fetchAndUpdate()
+        var mySyncedScores: [DailyScore] = []
+        if challenge.status == .active {
+            mySyncedScores = await SyncCoordinator.shared.syncChallenge(challenge)
+        }
+        await fetchAndUpdate(syncedScores: mySyncedScores)
         await loadLeaderboard()
     }
 
@@ -264,16 +423,23 @@ final class ChallengeDetailViewModel {
     @MainActor
     func handleScoreUpdate() async {
         do {
+            let myUserID = UserSession.shared.userID ?? ""
             let updatedScores = try await ck.fetchDailyScores(challengeID: challenge.id,
                                                                since: lastFetchDate)
+            let today = Date()
             for score in updatedScores {
-                if let idx = participations.firstIndex(where: { $0.id == score.participationID }) {
-                    if let scoreIdx = participations[idx].dailyScores.firstIndex(where: { $0.id == score.id }) {
-                        participations[idx].dailyScores[scoreIdx] = score
-                    } else {
-                        participations[idx].dailyScores.append(score)
-                        participations[idx].dailyScores.sort { $0.date < $1.date }
-                    }
+                guard let idx = participations.firstIndex(where: { $0.id == score.participationID }) else { continue }
+                // Don't overwrite today's score for the current user — the HealthKit overlay
+                // is always more accurate than a CloudKit push that may carry stale/zero values.
+                let isMyTodayScore = participations[idx].user.id == myUserID
+                                  && Calendar.current.isDate(score.date, inSameDayAs: today)
+                if isMyTodayScore { continue }
+
+                if let scoreIdx = participations[idx].dailyScores.firstIndex(where: { $0.id == score.id }) {
+                    participations[idx].dailyScores[scoreIdx] = score
+                } else {
+                    participations[idx].dailyScores.append(score)
+                    participations[idx].dailyScores.sort { $0.date < $1.date }
                 }
             }
             lastFetchDate = Date()

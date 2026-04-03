@@ -66,6 +66,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         BackgroundTaskScheduler.registerTasks()
         UNUserNotificationCenter.current().delegate = self
+        // Re-request HealthKit authorization on every launch. HealthKit only presents
+        // the permission dialog for types not yet requested, so this is a no-op for
+        // users who already have all permissions. It silently picks up any new types
+        // added to HealthKitManager.readTypes (e.g. distanceWalkingRunning) for users
+        // who onboarded before the new type was added.
+        Task { try? await HealthKitManager.shared.requestAuthorization() }
         return true
     }
 

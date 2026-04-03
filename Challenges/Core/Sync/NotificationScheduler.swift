@@ -5,13 +5,20 @@ import UserNotifications
 ///
 /// Call `reschedule(for:)` any time the challenge list changes (on load, join, create).
 /// Call `remove(challengeID:)` when the user deletes or leaves a specific challenge.
-/// Call `rescheduleFromPrefs(challenges:)` when the user toggles notification prefs in Settings.
 enum NotificationScheduler {
 
     // MARK: - Public API
 
     /// Rebuilds all pending challenge notifications from scratch.
     /// Safe to call repeatedly — removes stale entries before adding fresh ones.
+    ///
+    /// Notification cadence:
+    ///   • Day before a challenge starts  → per-challenge "starts tomorrow" reminder.
+    ///   • First day of a challenge       → per-challenge "challenge begins today" push.
+    ///   • Last day of a challenge        → per-challenge "final day" push.
+    ///   • 1 h after a challenge ends     → per-challenge "see your results" push.
+    ///   • Every other active-challenge day → ONE generic daily notification regardless
+    ///                                        of how many challenges the user is in.
     static func reschedule(for challenges: [Challenge]) async {
         let center = UNUserNotificationCenter.current()
         let status = await center.notificationSettings().authorizationStatus
@@ -20,35 +27,44 @@ enum NotificationScheduler {
         let prefs = NotificationPrefs()
         var requests: [UNNotificationRequest] = []
 
-        // iOS caps pending notifications at 64. Reserve ~3 per non-completed challenge
-        // (start, end, final) and split the remaining budget evenly across active challenges.
-        let nonCompleted = challenges.filter { $0.status != .completed }.count
-        let activeCount  = challenges.filter { $0.status == .active }.count
-        let lifecycleBudget = nonCompleted * 3
-        let dailyBudget = max(0, 64 - lifecycleBudget)
-        let dailyPerChallenge = activeCount > 0 ? max(1, dailyBudget / activeCount) : 7
-
+        // ── 1. Per-challenge lifecycle notifications ──────────────────────────
         for challenge in challenges {
             switch challenge.status {
             case .pending:
                 startingRequest(for: challenge, prefs: prefs).map { requests.append($0) }
             case .active:
-                endingRequest(for: challenge, prefs: prefs).map  { requests.append($0) }
-                finalRequest(for: challenge, prefs: prefs).map   { requests.append($0) }
-                requests += dailyRequests(for: challenge, prefs: prefs, limit: dailyPerChallenge)
+                firstDayRequest(for: challenge, prefs: prefs).map  { requests.append($0) }
+                lastDayRequest(for: challenge, prefs: prefs).map   { requests.append($0) }
+                finalRequest(for: challenge, prefs: prefs).map     { requests.append($0) }
             case .completed:
                 break
             }
         }
 
-        // Atomically replace all existing challenge notifications
+        // ── 2. One generic daily notification (replaces per-challenge dailies) ─
+        // No matter how many active challenges the user is in, they receive exactly
+        // one reminder per day — eliminating notification spam for multi-challenge users.
+        if prefs.dailyUpdate {
+            let active = challenges.filter { $0.status == .active }
+            if !active.isEmpty {
+                // Budget: iOS caps pending notifications at 64.
+                // Lifecycle slots per non-completed challenge: up to 4
+                // (starting, first-day, last-day, final).
+                let lifecycleBudget = challenges.filter { $0.status != .completed }.count * 4
+                let dailyBudget = max(0, 64 - lifecycleBudget)
+
+                requests += genericDailyRequests(for: active, prefs: prefs, limit: dailyBudget)
+            }
+        }
+
+        // Atomically replace all existing challenge notifications.
         await removeAllChallenge(center: center)
         for req in requests {
             do {
                 try await center.add(req)
             } catch {
                 #if DEBUG
-                print("[NotificationScheduler] Failed to add notification \(req.identifier): \(error)")
+                print("[NotificationScheduler] Failed to add \(req.identifier): \(error)")
                 #endif
             }
         }
@@ -65,8 +81,9 @@ enum NotificationScheduler {
         center.removePendingNotificationRequests(withIdentifiers: toRemove)
     }
 
-    // MARK: - Per-type builders
+    // MARK: - Per-challenge lifecycle builders
 
+    /// 9 AM the day before the challenge starts — "starts tomorrow".
     private static func startingRequest(for challenge: Challenge, prefs: NotificationPrefs) -> UNNotificationRequest? {
         guard prefs.challengeStarting,
               let fireDate = atHour(9, onDayBefore: challenge.startDate) else { return nil }
@@ -80,63 +97,105 @@ enum NotificationScheduler {
         return request(id: "ch-starting-\(challenge.id)", content: content, fireDate: fireDate)
     }
 
-    private static func endingRequest(for challenge: Challenge, prefs: NotificationPrefs) -> UNNotificationRequest? {
-        guard prefs.challengeEnding,
-              let fireDate = atHour(9, onDayBefore: challenge.endDate) else { return nil }
+    /// 9 AM on the first day of the challenge — "starts today".
+    private static func firstDayRequest(for challenge: Challenge, prefs: NotificationPrefs) -> UNNotificationRequest? {
+        guard prefs.challengeStarting,
+              let fireDate = atHour(9, on: challenge.startDate),
+              fireDate > Date() else { return nil }
 
         let content = UNMutableNotificationContent()
-        content.title = "Last day to compete 💪"
-        content.body  = "\(challenge.title) ends tomorrow. Push hard and close those rings!"
+        content.title = "\(challenge.title) starts today! 🏁"
+        content.body  = "Day 1 is here. Get moving and build an early lead!"
         content.sound = .default
         content.userInfo = ["challengeID": challenge.id]
 
-        return request(id: "ch-ending-\(challenge.id)", content: content, fireDate: fireDate)
+        return request(id: "ch-firstday-\(challenge.id)", content: content, fireDate: fireDate)
     }
 
+    /// 9 AM on the last day of the challenge — "final day, give it everything".
+    private static func lastDayRequest(for challenge: Challenge, prefs: NotificationPrefs) -> UNNotificationRequest? {
+        guard prefs.challengeEnding,
+              let fireDate = atHour(9, on: challenge.endDate),
+              fireDate > Date() else { return nil }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Final day, leave it all on the field 💪"
+        content.body  = "\(challenge.title) ends today. Close those rings!"
+        content.sound = .default
+        content.userInfo = ["challengeID": challenge.id]
+
+        return request(id: "ch-lastday-\(challenge.id)", content: content, fireDate: fireDate)
+    }
+
+    /// 1 hour after the challenge ends — "see your final results".
     private static func finalRequest(for challenge: Challenge, prefs: NotificationPrefs) -> UNNotificationRequest? {
         guard prefs.finalStandings else { return nil }
-        // Fire 1 hour after the challenge ends
         let fireDate = challenge.endDate.addingTimeInterval(3600)
         guard fireDate > Date() else { return nil }
 
         let content = UNMutableNotificationContent()
         content.title = "Challenge complete 🏆"
-        content.body  = "\(challenge.title) has ended. See how you finished!"
+        content.body  = "\(challenge.title) has ended. See where you finished!"
         content.sound = .default
         content.userInfo = ["challengeID": challenge.id]
 
         return request(id: "ch-final-\(challenge.id)", content: content, fireDate: fireDate)
     }
 
-    private static func dailyRequests(for challenge: Challenge, prefs: NotificationPrefs, limit: Int) -> [UNNotificationRequest] {
+    // MARK: - Generic daily notifications
+
+    /// Builds one notification per calendar day that any active challenge covers.
+    /// The message is generic when multiple challenges are active, or names the
+    /// challenge when the user is in only one.
+    private static func genericDailyRequests(
+        for activeChallenges: [Challenge],
+        prefs: NotificationPrefs,
+        limit: Int
+    ) -> [UNNotificationRequest] {
         guard prefs.dailyUpdate else { return [] }
 
         let cal = Calendar.current
         let now = Date()
-        // Start from tomorrow — no point notifying about standings on challenge day 0
         guard let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) else { return [] }
-        let endDay = cal.startOfDay(for: challenge.endDate)
+
+        // Furthest end date across all active challenges.
+        guard let latestEnd = activeChallenges.map({ $0.endDate }).max() else { return [] }
+        let endDay = cal.startOfDay(for: latestEnd)
 
         var requests: [UNNotificationRequest] = []
         var day = tomorrow
 
-        while day <= endDay && requests.count < limit { // limit respects the 64-notification system cap shared across all challenges
-            var comps = cal.dateComponents([.year, .month, .day], from: day)
-            comps.hour = 9
-            if let fireDate = cal.date(from: comps), fireDate > now {
-                let dayTag = isoDay(day)
-                let content = UNMutableNotificationContent()
-                content.title = "How are you ranking? 📊"
-                content.body  = "Check your standings in \(challenge.title)."
-                content.sound = .default
-                content.userInfo = ["challengeID": challenge.id]
-                requests.append(request(
-                    id: "ch-daily-\(challenge.id)-\(dayTag)",
-                    content: content,
-                    fireDate: fireDate
-                ))
+        while day <= endDay && requests.count < limit {
+            // Which challenges are still running on this day?
+            let running = activeChallenges.filter { challenge in
+                let start = cal.startOfDay(for: challenge.startDate)
+                let end   = cal.startOfDay(for: challenge.endDate)
+                return day >= start && day <= end
             }
-            day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+
+            if !running.isEmpty {
+                var comps = cal.dateComponents([.year, .month, .day], from: day)
+                comps.hour = 9
+                if let fireDate = cal.date(from: comps), fireDate > now {
+                    let content = UNMutableNotificationContent()
+                    content.sound = .default
+                    if running.count == 1 {
+                        content.title = "Keep pushing! 💪"
+                        content.body  = "Check your standings in \(running[0].title)."
+                    } else {
+                        content.title = "Stay on top 🏆"
+                        content.body  = "You're in \(running.count) active challenges. Time to close those rings!"
+                    }
+                    requests.append(request(
+                        id:       "ch-daily-\(isoDay(day))",
+                        content:  content,
+                        fireDate: fireDate
+                    ))
+                }
+            }
+
+            guard let nextDay = cal.date(byAdding: .day, value: 1, to: day) else { break }
+            day = nextDay
         }
         return requests
     }
@@ -149,7 +208,15 @@ enum NotificationScheduler {
         return UNNotificationRequest(identifier: id, content: content, trigger: trigger)
     }
 
-    /// Returns 9am (or `hour`) on the calendar day before `date`, or nil if that moment is in the past.
+    /// Returns `hour`:00 on the same calendar day as `date`, or nil if already past.
+    private static func atHour(_ hour: Int, on date: Date) -> Date? {
+        let cal = Calendar.current
+        var comps = cal.dateComponents([.year, .month, .day], from: date)
+        comps.hour = hour
+        return cal.date(from: comps)
+    }
+
+    /// Returns `hour`:00 on the calendar day before `date`, or nil if already past.
     private static func atHour(_ hour: Int, onDayBefore date: Date) -> Date? {
         let cal = Calendar.current
         guard let dayBefore = cal.date(byAdding: .day, value: -1, to: date) else { return nil }
@@ -161,7 +228,7 @@ enum NotificationScheduler {
 
     private static func removeAllChallenge(center: UNUserNotificationCenter) async {
         let pending = await center.pendingNotificationRequests()
-        let prefixes = ["ch-starting-", "ch-ending-", "ch-final-", "ch-daily-"]
+        let prefixes = ["ch-starting-", "ch-firstday-", "ch-lastday-", "ch-final-", "ch-daily-"]
         let toRemove = pending
             .filter { req in prefixes.contains { req.identifier.hasPrefix($0) } }
             .map { $0.identifier }
@@ -169,10 +236,13 @@ enum NotificationScheduler {
     }
 
     private static func containsChallenge(_ identifier: String, id: String) -> Bool {
-        identifier.hasPrefix("ch-starting-\(id)") ||
-        identifier.hasPrefix("ch-ending-\(id)")   ||
-        identifier.hasPrefix("ch-final-\(id)")    ||
-        identifier.hasPrefix("ch-daily-\(id)-")
+        identifier.hasPrefix("ch-starting-\(id)")  ||
+        identifier.hasPrefix("ch-firstday-\(id)")  ||
+        identifier.hasPrefix("ch-lastday-\(id)")   ||
+        identifier.hasPrefix("ch-final-\(id)")
+        // Note: generic daily notifications (ch-daily-YYYY-MM-DD) are date-keyed,
+        // not challenge-keyed, so they are NOT removed here. They are rebuilt
+        // correctly by the next reschedule(for:) call.
     }
 
     private static func isoDay(_ date: Date) -> String {

@@ -3,10 +3,15 @@ import SwiftUI
 // MARK: - Activity Hero Card
 
 /// Designed to match the Apple Fitness "Activity Rings" summary card pixel-for-pixel.
-/// Shows the large ring stack on the left, colored metric rows on the right,
-/// and a divider footer with today's + total points.
+/// Shows the large ring stack on the left and colored metric rows on the right.
 struct MyProgressView: View {
     let participation: Participation
+
+    // Use the live UserDefaults value — the same source the scoring engine uses.
+    // participation.hasAppleWatch is stamped at join time and can be stale
+    // (e.g. user paired a Watch after joining the challenge).
+    @AppStorage("hasAppleWatch")   private var hasAppleWatch   = false
+    @AppStorage("preferredUnits")  private var preferredUnits  = "Imperial"
 
     private var rings: RingData { todayScore?.ringData ?? emptyRingData }
 
@@ -23,9 +28,6 @@ struct MyProgressView: View {
             Divider()
                 .padding(.horizontal, 16)
             stepsDistanceRow
-            Divider()
-                .padding(.horizontal, 16)
-            footer
         }
         .background(Color.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -76,7 +78,7 @@ struct MyProgressView: View {
 
             // Metric rows — frame fills remaining width so content spreads to the right edge
             VStack(alignment: .leading, spacing: 10) {
-                if participation.hasAppleWatch {
+                if hasAppleWatch {
                     MetricRowView(label: "Move",
                                   actual: rings.moveCalories,
                                   goal: rings.moveGoal,
@@ -136,8 +138,14 @@ struct MyProgressView: View {
 
     private var distanceString: String {
         let meters = rings.distanceMeters
-        let locale = Locale.current
-        let usesMetric = locale.measurementSystem != .us
+        // Respect the explicit preference the user set in Profile → Units.
+        // Fall back to locale when no preference has been saved yet.
+        let usesMetric: Bool
+        if UserDefaults.standard.object(forKey: "preferredUnits") != nil {
+            usesMetric = preferredUnits == "Metric"
+        } else {
+            usesMetric = Locale.current.measurementSystem != .us
+        }
         if usesMetric {
             let km = meters / 1000
             return String(format: "%.2f km", km)
@@ -145,20 +153,6 @@ struct MyProgressView: View {
             let miles = meters / 1609.344
             return String(format: "%.2f mi", miles)
         }
-    }
-
-    // MARK: - Footer
-
-    private var footer: some View {
-        HStack(spacing: 0) {
-            PointsFooterCell(value: todayScore?.points ?? 0, label: "Today")
-                .frame(maxWidth: .infinity)
-            Color.fitnessSeparator
-                .frame(width: 0.5, height: 30)
-            PointsFooterCell(value: participation.totalPoints, label: "Total")
-                .frame(maxWidth: .infinity)
-        }
-        .padding(.vertical, 14)
     }
 
     // MARK: - Helpers
@@ -246,9 +240,34 @@ private struct StatCell: View {
     }
 }
 
-// MARK: - Points Footer
+// MARK: - Points Card
 
-private struct PointsFooterCell: View {
+/// Standalone card shown below the activity rings card with today's and total points.
+struct PointsCardView: View {
+    let participation: Participation
+
+    private var todayPoints: Double {
+        participation.dailyScores.last {
+            Calendar.current.isDate($0.date, inSameDayAs: Date())
+        }?.points ?? 0
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            PointsCell(value: todayPoints, label: "Today")
+                .frame(maxWidth: .infinity)
+            Color.fitnessSeparator
+                .frame(width: 0.5, height: 30)
+            PointsCell(value: participation.totalPoints, label: "Total")
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.vertical, 16)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+private struct PointsCell: View {
     let value: Double
     let label: String
 

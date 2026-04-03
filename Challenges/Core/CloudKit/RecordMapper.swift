@@ -75,7 +75,6 @@ enum RecordMapper {
             return nil
         }
 
-        let maxParticipants = record["maxParticipants"] as? Int ?? 20
         return Challenge(
             id: record.recordID.recordName,
             title: title,
@@ -84,7 +83,6 @@ enum RecordMapper {
             endDate: endDate,
             status: status,
             inviteCode: inviteCode,
-            maxParticipants: maxParticipants,
             createdAt: createdAt
         )
     }

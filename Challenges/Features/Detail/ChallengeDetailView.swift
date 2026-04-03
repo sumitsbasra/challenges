@@ -5,6 +5,7 @@ import Charts
 struct ChallengeDetailView: View {
     @Environment(UserSession.self) private var session
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var vm: ChallengeDetailViewModel
     @State private var showDeleteConfirm  = false
     @State private var showLeaveConfirm   = false
@@ -30,10 +31,13 @@ struct ChallengeDetailView: View {
                     MyProgressView(participation: me)
                         .padding(.horizontal, 16)
                         .padding(.top, 24)
+                    PointsCardView(participation: me)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
                 }
 
-                // 3. Score history chart — active challenges with data
-                if challenge.status == .active,
+                // 3. Score history chart — active and completed challenges with data
+                if challenge.status != .pending,
                    let me = vm.currentUserParticipation,
                    !me.dailyScores.isEmpty {
                     ScoreHistoryChart(participation: me, challenge: challenge)
@@ -41,15 +45,9 @@ struct ChallengeDetailView: View {
                         .padding(.top, 20)
                 }
 
-                // 4. Results/Leaderboard
-                if challenge.status == .completed {
-                    PodiumSection(participations: vm.rankedParticipations, userID: session.userID)
-                        .padding(.top, 28)
-                } else {
-                    // Show for both pending and active — pending shows who's joined, no ranks
-                    leaderboardSection
-                        .padding(.top, 28)
-                }
+                // 4. Leaderboard — all statuses (pending shows who's joined, active/completed shows ranks)
+                leaderboardSection
+                    .padding(.top, 28)
 
                 // 5. Invite code — creator only, pending or active challenges
                 if challenge.status != .completed,
@@ -162,6 +160,14 @@ struct ChallengeDetailView: View {
         }
         .task { await vm.load() }
         .refreshable { await vm.refresh() }
+        // Re-sync when the app returns to the foreground. The Apple Watch batches
+        // activity summaries and may not have pushed them to the iPhone HealthKit
+        // store when the detail first loaded. This picks up past-day scores that
+        // were 0 at load time but are now correct.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, challenge.status == .active else { return }
+            Task { await vm.refresh() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .dailyScoreDidUpdate)) { _ in
             Task { await vm.handleScoreUpdate() }
         }
@@ -319,12 +325,12 @@ private struct EditChallengeSheet: View {
     private var canSave:   Bool { !title.trimmingCharacters(in: .whitespaces).isEmpty }
 
     private var minStart: Date {
-        Calendar.current.startOfDay(
-            for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        return Calendar.current.startOfDay(for: tomorrow)
     }
     private var minEnd: Date {
-        Calendar.current.startOfDay(
-            for: Calendar.current.date(byAdding: .day, value: 1, to: startDate)!)
+        let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate
+        return Calendar.current.startOfDay(for: nextDay)
     }
 
     var body: some View {
@@ -511,7 +517,10 @@ private struct ScoreHistoryChart: View {
     let challenge: Challenge
 
     private var scores: [DailyScore] {
-        participation.dailyScores.sorted { $0.date < $1.date }
+        let today = Calendar.current.startOfDay(for: Date())
+        return participation.dailyScores
+            .filter { Calendar.current.startOfDay(for: $0.date) <= today }
+            .sorted { $0.date < $1.date }
     }
 
     private var today: Date { Calendar.current.startOfDay(for: Date()) }

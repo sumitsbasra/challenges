@@ -14,16 +14,18 @@ struct DailyScore: Identifiable, Codable {
     static func makeID(participationID: String, date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.timeZone = TimeZone.current  // local timezone so ID matches the user's calendar day
         return "\(participationID)_\(formatter.string(from: date))"
     }
 
-    /// Returns noon UTC for the given calendar date, ensuring stable day identity
-    /// regardless of viewer timezone.
+    /// Returns noon UTC for the given local calendar date, ensuring stable day identity
+    /// anchored to the user's local day rather than the UTC day.
     static func noonUTC(for date: Date) -> Date {
+        // Extract the LOCAL calendar day to avoid off-by-one errors when local time
+        // is late enough that the UTC date has already rolled over to the next day.
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "UTC") ?? TimeZone(secondsFromGMT: 0)!
-        let components = cal.dateComponents([.year, .month, .day], from: date)
         var noonComponents = components
         noonComponents.hour = 12
         noonComponents.minute = 0

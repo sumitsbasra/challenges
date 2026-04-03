@@ -1,10 +1,10 @@
 # Challenges
 
-Group fitness competitions for Apple rings — extend Apple's native 1-on-1 Activity Sharing to groups of 2–20 people using the same ring-based points system users already know.
+Group fitness competitions for Apple rings — extends Apple's native Activity Sharing to groups of 2–20 people using the same ring-based scoring system users already know.
 
 ## What it does
 
-Apple's built-in Fitness competitions only support head-to-head matchups. Challenges removes that limit: invite a group, compete over a custom date range, and see a live leaderboard updated in real time. Apple Watch users score on all three rings; iPhone-only users also score on three metrics (steps, exercise minutes, active energy) — both paths use the same formula so everyone competes fairly.
+Apple's built-in Fitness competitions only support head-to-head matchups. Challenges removes that limit: invite a group, compete over a custom date range, and see a live leaderboard updated in real time. Apple Watch users score on all three rings; iPhone-only users score on three matched metrics (steps, exercise minutes, active energy) — both paths use the same formula so everyone competes fairly.
 
 ## Tech stack
 
@@ -29,49 +29,75 @@ pts = ((move/moveGoal + exercise/30min + stand/12hr) / 3) × 600
 pts = ((steps/10000 + exercise/30min + activeEnergy/500kcal) / 3) × 600
 ```
 
-Each contribution is capped at 2× so exceeding a goal still rewards effort. Max is 1200 pts/day (all three metrics at 200%). Scoring mode is snapshotted at join time and never changes mid-competition.
+Each contribution is capped at 2× so exceeding a goal still rewards effort. Max is 1200 pts/day (all three metrics at 200%). Scoring mode is determined at join time by the Watch detected on-device and never changes mid-competition.
 
 ## Features
 
 - **Group competitions** — 2–20 participants, custom start and end dates
 - **Late joining** — participants can join active challenges; scoring starts from their join date
-- **Live leaderboard** — CloudKit subscriptions push updates in near real-time
-- **Invite codes** — 6-character codes (e.g. `FX4K9R`) shareable via link or copy-paste
-- **Fair scoring** — Watch and non-Watch users compete on equal footing with matched 3-metric formulas
-- **Score history chart** — line chart of daily points across the challenge window
-- **Podium view** — gold/silver/bronze results screen when a challenge completes
-- **Profile photos** — avatar with crop/zoom, cached locally
-- **Siri & Shortcuts** — "What's my rank in Summer Ring Crush?" returns a spoken result without opening the app
-- **Spotlight search** — challenges appear in system search; tap to jump straight to the detail view
-- **Home Screen widget** — shows your current rank and points; rises to the top of the Smart Stack at 7am and 7pm
-- **Background sync** — HealthKit data synced every 15 minutes via BGAppRefreshTask
+- **Live leaderboard** — CloudKit subscriptions push score updates in near real-time, active and completed challenges both show ranked participant list
+- **Invite codes** — 6-character codes (e.g. `FX4K9R`) shareable via link, copy-paste, or system share sheet
+- **Fair scoring** — Watch and non-Watch users compete on equal footing with matched 3-metric formulas; scoring mode is locked at join time
+- **Score deduplication** — aggregator deduplicates CloudKit records by calendar day (keeps highest) to prevent point inflation from save retries
+- **Score history chart** — line chart of daily points across the full challenge window, shown for both active and completed challenges
+- **Today's activity card** — Apple Fitness-style ring stack with Move/Exercise/Stand (Watch) or Steps/Exercise/Energy (iPhone) metrics; respects user's units preference (Imperial/Metric) for distance
+- **Instant home screen** — cache pre-populated before first SwiftUI frame so challenges appear immediately on every launch with no blank flash
+- **Watch ring fallback** — if the activity summary hasn't synced yet (common early morning), falls back to individual HealthKit queries so rings are never stuck at zero
+- **Profile photos** — avatar with crop/zoom, cached locally, synced to CloudKit
+- **Units preference** — Imperial/Metric toggle in Profile; distance displayed in chosen units everywhere
+- **Siri & Shortcuts** — "What's my rank in [challenge]?" returns a spoken result without opening the app; works with Apple Intelligence natural language on iOS 18.1+
+- **Spotlight search** — challenges indexed in Core Spotlight; tap a result to jump straight to the detail view
+- **Home Screen widget** — shows current rank, points, days remaining, and participant count; Smart Stack relevance hints surface it at 7am and 7pm
+- **Local notifications** — day-before reminder, first-day and last-day nudges, and final standings alert; per-type toggles in Profile; respects iOS notification permission state
+- **Background sync** — HealthKit → CloudKit sync every 15 minutes via `BGAppRefreshTask`; also triggered by the widget timeline reload
 
 ## Project structure
 
 ```
 Challenges/
-├── AppIntents/          Siri/Shortcuts intents and entity query
+├── AppIntents/          Siri/Shortcuts intents and entity queries
 ├── Core/
 │   ├── Auth/            Sign in with Apple, UserSession
+│   ├── Cache/           ChallengeCache (UserDefaults-based, pre-populates home on launch)
 │   ├── CloudKit/        CloudKitManager, RecordMapper
-│   ├── HealthKit/       ActivityDataFetcher, WatchDetector
+│   ├── HealthKit/       ActivityDataFetcher, HealthKitManager, WatchDetector
 │   ├── Intelligence/    SpotlightIndexer, WidgetDataWriter
-│   └── Sync/            SyncCoordinator, NotificationScheduler, background task scheduler
+│   ├── Sync/            SyncCoordinator, NotificationScheduler, BackgroundTaskScheduler
+│   └── Utils/           Shared utilities
+├── Extensions/          Date+Competition and other Swift extensions
 ├── Features/
-│   ├── Challenges/      List, New, Join views + view models
-│   ├── Detail/          Detail, Leaderboard, MyProgress, ScoreHistoryChart
-│   ├── Onboarding/      Sign in + HealthKit explanation + name/photo entry
-│   └── Profile/         Health permissions, notification settings
+│   ├── Challenges/      New challenge + join views and view models
+│   ├── Detail/          ChallengeDetailView, leaderboard, MyProgressView, DailyBreakdownView, ScoreHistoryChart
+│   ├── Home/            HomeView + HomeViewModel (rings card, challenge cards, empty state)
+│   ├── Onboarding/      Sign in, HealthKit explanation, name/photo entry
+│   ├── Profile/         Data source, health permissions, notification settings, units
+│   └── Today/           TodayItem model
 ├── Models/              Challenge, Participation, DailyScore, AppUser, RingData
 ├── Scoring/             PointsCalculator, GoalResolver, ScoreAggregator
-└── UI/                  Components, colors, typography
+└── UI/
+    ├── Components/      Reusable views (ThreeRingView, EmptyStateView, etc.)
+    └── Styles/          Colors, typography, card backgrounds
 
-ChallengesWidget/        WidgetKit extension (separate Xcode target)
+ChallengesWidget/        WidgetKit extension — rank, points, days remaining (systemSmall + systemMedium)
 ```
+
+## Data flow
+
+```
+HealthKit → SyncCoordinator → CloudKit (DailyScore records)
+                ↓ (returns merged scores directly, bypasses read-after-write latency)
+         ChallengeDetailViewModel / HomeViewModel
+                ↓
+           ScoreAggregator (dedup by day, sum, rank)
+                ↓
+           SwiftUI views + Widget (via App Group UserDefaults)
+```
+
+Sync runs on open (detail view), on home screen load, and every 15 minutes in the background. The sync result is injected directly into the UI rather than re-fetching from CloudKit, which avoids the read-after-write consistency window inherent in the public CloudKit database.
 
 ## Apple Intelligence integration
 
-On iOS 18.1+ with Apple Intelligence enabled, Siri understands natural language requests semantically — no exact phrase matching required. The same `AppIntent` conformances that power Shortcuts work for free with the AI upgrade.
+On iOS 18.1+ with Apple Intelligence enabled, Siri understands natural language requests semantically — no exact phrase matching required.
 
 | Capability | How to trigger |
 |---|---|
@@ -87,7 +113,7 @@ On iOS 18.1+ with Apple Intelligence enabled, Siri understands natural language 
 1. Open `Challenges.xcodeproj`
 2. Set your development team in both the `Challenges` and `ChallengesWidget` targets
 3. Enable capabilities: **HealthKit**, **CloudKit**, **Push Notifications**, **Background Modes** (fetch, processing, remote-notification), **Sign in with Apple**, **App Groups**
-4. Register App Group `group.studio.ssb.challenges` in the Apple Developer portal for both App IDs
+4. Register App Group `group.studio.ssb.challenges` in the Apple Developer portal for both App IDs (required for the widget to read data written by the main app)
 
 ## CloudKit indexes
 

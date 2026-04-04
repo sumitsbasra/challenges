@@ -33,7 +33,7 @@ Each contribution is capped at 2× so exceeding a goal still rewards effort. Max
 
 ## Features
 
-- **Group competitions** — 2–20 participants, custom start and end dates
+- **Group competitions** — unlimited participants, custom start and end dates
 - **Late joining** — participants can join active challenges; scoring starts from their join date
 - **Live leaderboard** — CloudKit subscriptions push score updates in near real-time, active and completed challenges both show ranked participant list
 - **Invite codes** — 6-character codes (e.g. `FX4K9R`) shareable via link, copy-paste, or system share sheet

@@ -201,6 +201,10 @@ final class HomeViewModel {
                 .union(activeResult.participantIDs)
                 .union(completedResult.participantIDs)
             applyAll(all, activeItems: active, completedItems: completed)
+            // Immediately patch today's points from the in-memory ring data so every
+            // reload trigger (navigation pop, CloudKit push, participation change) shows
+            // live activity values without waiting for another HealthKit sync.
+            patchTodayPointsFromRingData()
             ChallengeCache.save(challenges: all, activeItems: active, completedItems: completed, userID: userID)
             // Prune avatars for users no longer in any of our challenges.
             Task.detached { AvatarCache.pruneStale(keepingUserIDs: seenIDs) }
@@ -304,6 +308,43 @@ final class HomeViewModel {
         }
     }
 
+    /// Patches `todayPoints` on every active card using the ring data already loaded
+    /// from HealthKit — no additional network calls needed. Called at the end of every
+    /// `loadChallenges` so all reload triggers (pop-back, push notification, participation
+    /// change) always show live activity data instead of potentially-stale CloudKit values.
+    ///
+    /// Only upgrades a card's today pts; never downgrades (guards against applying a ring
+    /// snapshot from earlier in the day when CloudKit already has a more-recent synced value).
+    @MainActor
+    func patchTodayPointsFromRingData() {
+        guard !isLoadingRings, !activeItems.isEmpty else { return }
+        let points: Double
+        if hasWatch {
+            points = PointsCalculator.calculateWatch(
+                moveCalories: activeEnergy, moveGoal: moveGoal,
+                exerciseMinutes: exerciseMinutes, standHours: standHours
+            ).points
+        } else {
+            points = PointsCalculator.calculateNonWatch(
+                steps: steps, stepsGoal: stepsGoal,
+                activeEnergy: activeEnergy, activeEnergyGoal: energyGoal,
+                exerciseMinutes: exerciseMinutes
+            ).points
+        }
+        guard points > 0 else { return }
+        activeItems = activeItems.map { item in
+            guard item.todayPoints < points else { return item }  // never downgrade
+            // Correct total: swap out the old today value for the new one.
+            // Works whether or not CloudKit already included today in the total.
+            let adjustedTotal = item.totalPoints - item.todayPoints + points
+            return TodayItem(
+                id: item.id, challenge: item.challenge,
+                rank: item.rank, participantCount: item.participantCount,
+                todayPoints: points, totalPoints: max(adjustedTotal, points)
+            )
+        }
+    }
+
     /// Returns a new TodayItem with the challenge mutated by `modify`, or the original if IDs don't match.
     private func patchItem(_ item: TodayItem, id: String, modify: (inout Challenge) -> Void) -> TodayItem {
         guard item.id == id else { return item }
@@ -338,7 +379,22 @@ final class HomeViewModel {
                 let ranked = ScoreAggregator.ranked(parts)
                 // Collect every participant's user ID so we can prune stale avatar files.
                 participantIDs.formUnion(ranked.map { $0.user.id })
-                guard let mine = ranked.first(where: { $0.user.id == userID }) else { continue }
+
+                guard let mine = ranked.first(where: { $0.user.id == userID }) else {
+                    // No participation record found for the current user. This can happen
+                    // immediately after creating a challenge because CloudKit's query index
+                    // hasn't propagated the new Participation record yet.
+                    // Show a placeholder card so the challenge doesn't vanish — it will
+                    // display correctly on the next refresh once the record is queryable.
+                    if challenge.creatorID == userID {
+                        items.append(TodayItem(
+                            id: challenge.id, challenge: challenge,
+                            rank: 1, participantCount: max(1, ranked.count),
+                            todayPoints: 0, totalPoints: 0
+                        ))
+                    }
+                    continue
+                }
 
                 let todayPts = mine.dailyScores
                     .first(where: { Calendar.current.isDateInToday($0.date) })?.points ?? 0
@@ -352,8 +408,15 @@ final class HomeViewModel {
                     totalPoints:      mine.totalPoints
                 ))
             } catch {
-                // One failed challenge fetch should not block the rest from loading.
-                continue
+                // CloudKit fetch failed for this challenge. Still show a placeholder card
+                // for challenges the current user created so they never fully disappear.
+                if challenge.creatorID == userID {
+                    items.append(TodayItem(
+                        id: challenge.id, challenge: challenge,
+                        rank: 1, participantCount: 1,
+                        todayPoints: 0, totalPoints: 0
+                    ))
+                }
             }
         }
         return (items, participantIDs)
@@ -518,7 +581,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private var scrollContent: some View {
-        let hasChallenges = !vm.activeItems.isEmpty || !vm.upcomingChallenges.isEmpty
+        let hasChallenges = !vm.activeItems.isEmpty || !vm.upcomingChallenges.isEmpty || !vm.completedChallenges.isEmpty
         if !hasChallenges && !vm.isLoadingChallenges {
             // No challenges: fixed layout so empty state centers in remaining space
             VStack(spacing: 0) {
@@ -541,8 +604,16 @@ struct HomeView: View {
                 VStack(spacing: 24) {
                     if let error = vm.error { errorBanner(error).padding(.horizontal, 16) }
                     activitySection.padding(.top, 8)
-                    challengesSection
-                    if vm.showCompleted && !vm.completedChallenges.isEmpty {
+                    // Only show the active/upcoming section when it has content —
+                    // avoids a floating "Challenges" header with nothing below it
+                    // when the user has only completed challenges.
+                    if !vm.activeItems.isEmpty || !vm.upcomingChallenges.isEmpty {
+                        challengesSection
+                    }
+                    // Auto-expand completed when there are no active challenges so
+                    // the user doesn't need to manually tap "Show Completed".
+                    let autoShowCompleted = vm.activeItems.isEmpty && vm.upcomingChallenges.isEmpty
+                    if (vm.showCompleted || autoShowCompleted) && !vm.completedChallenges.isEmpty {
                         completedSection
                     }
                 }

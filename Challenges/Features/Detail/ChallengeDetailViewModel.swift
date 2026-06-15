@@ -112,14 +112,55 @@ final class ChallengeDetailViewModel {
 
         await CloudKitManager.shared.registerSubscriptions(forActiveChallengeIDs: [challenge.id])
 
-        // If we created this challenge but still aren't a participant (propagation delay), retry.
+        // If we created this challenge but still aren't a participant, recover.
         let userID = UserSession.shared.userID ?? ""
         if challenge.creatorID == userID,
            !participations.contains(where: { $0.user.id == userID }) {
             Task {
+                // First assume CloudKit propagation delay: wait, then refetch. This picks
+                // up a participation that exists but hadn't replicated yet (just-created
+                // challenge) without creating a duplicate.
                 try? await Task.sleep(for: .seconds(3))
                 await silentParticipationRefresh()
+                // Still missing → the record genuinely doesn't exist (e.g. a challenge
+                // created by an older build before auto-join was reliable). Recreate it
+                // so the creator shows up on their own leaderboard.
+                if !participations.contains(where: { $0.user.id == userID }) {
+                    await recreateCreatorParticipation()
+                }
             }
+        }
+    }
+
+    /// Recreates the current user's participation when they're the creator but no
+    /// participation record exists. Self-heals challenges whose auto-join never
+    /// persisted. Injects the record locally too, since CloudKit read-after-write
+    /// is not immediately consistent.
+    @MainActor
+    private func recreateCreatorParticipation() async {
+        let userID = UserSession.shared.userID ?? ""
+        guard let creator = UserSession.shared.currentUser,
+              challenge.creatorID == userID,
+              !participations.contains(where: { $0.user.id == userID }) else { return }
+
+        let participation = Participation(
+            id: UUID().uuidString,
+            challengeID: challenge.id,
+            user: creator,
+            // joinedAt ≤ startDate so the creator is scored for the full challenge window.
+            joinedAt: challenge.startDate,
+            status: .active,
+            hasAppleWatch: creator.hasAppleWatch
+        )
+        do {
+            try await ck.saveParticipation(participation)
+            participations.append(participation)
+            ParticipationCache.save(participations, challengeID: challenge.id)
+            NotificationCenter.default.post(name: .participationDidChange, object: nil)
+        } catch {
+            #if DEBUG
+            print("[ChallengeDetail] recreateCreatorParticipation failed: \(error)")
+            #endif
         }
     }
 

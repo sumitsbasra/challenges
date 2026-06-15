@@ -203,6 +203,9 @@ struct OnboardingView: View {
     private func requestHealthKit() {
         Task {
             try? await HealthKitManager.shared.requestAuthorization()
+            // Start background delivery now that access is granted, so scores can sync
+            // without waiting for the next launch.
+            HealthKitManager.shared.startBackgroundDelivery()
             let hasWatch = await WatchDetector().detectAppleWatch()
             UserDefaults.standard.set(hasWatch, forKey: "hasAppleWatch")
             if var user = AuthManager.shared.pendingUser {

@@ -77,6 +77,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // added to HealthKitManager.readTypes (e.g. distanceWalkingRunning) for users
         // who onboarded before the new type was added.
         Task {
+            // Only touch HealthKit for already-signed-in users. New users grant access
+            // during onboarding (the .health step) — requesting here would pop the
+            // HealthKit permission dialog before they've even signed in.
+            guard UserSession.shared.isAuthenticated else { return }
+            // Re-request on launch so users who onboarded before a new data type was
+            // added pick it up (a no-op if all types are already authorized).
             try? await HealthKitManager.shared.requestAuthorization()
             // Register HealthKit background delivery so iOS wakes the app to sync scores
             // when new activity data arrives, without the user opening the app.

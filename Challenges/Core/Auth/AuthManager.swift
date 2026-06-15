@@ -111,22 +111,26 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
             currentUserID = ckRecordName
             isSignedIn = true
 
-            // If Apple didn't give us a name, try to recover it from CloudKit
-            // (covers reinstalls and new devices where the credential has no fullName).
-            if resolvedName == nil {
-                if let existing = try? await CloudKitManager.shared.fetchUser(recordName: ckRecordName) {
-                    resolvedName = existing.displayName
-                    displayName = resolvedName ?? displayName
-                }
+            // Always recover the existing profile from CloudKit, not just when the name
+            // is missing. fetchUser → RecordMapper.user re-downloads the avatar asset,
+            // re-caches it to disk, and returns its local avatarURL — this is what
+            // restores the profile photo after a reinstall. Gating it on a missing name
+            // meant the photo was lost whenever Apple still provided the name.
+            let existingUser = try? await CloudKitManager.shared.fetchUser(recordName: ckRecordName)
+            if resolvedName == nil, let existingName = existingUser?.displayName, !existingName.isEmpty {
+                resolvedName = existingName
+                displayName = existingName
             }
             UserDefaults.standard.set(displayName, forKey: "displayName")
             // Build a pending user immediately so OnboardingView can complete the session
             // even if the CloudKit save below fails (schema not yet deployed, etc.).
+            // Carry over the restored avatar (falling back to any already-cached file).
             let user = AppUser(
                 id: ckRecordName,
                 displayName: displayName,
                 appleUserID: appleUserID,
-                hasAppleWatch: false
+                hasAppleWatch: false,
+                avatarURL: existingUser?.avatarURL ?? AvatarCache.localURL(for: ckRecordName)
             )
             pendingUser = user
 

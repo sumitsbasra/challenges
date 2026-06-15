@@ -80,7 +80,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             try? await HealthKitManager.shared.requestAuthorization()
             // Register HealthKit background delivery so iOS wakes the app to sync scores
             // when new activity data arrives, without the user opening the app.
-            await HealthKitManager.shared.startBackgroundDelivery()
+            HealthKitManager.shared.startBackgroundDelivery()
         }
         return true
     }

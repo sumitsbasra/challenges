@@ -10,7 +10,7 @@ struct ShowChallengeIntent: AppIntent {
     var challenge: ChallengeEntity
 
     @MainActor
-    func perform() async throws -> some OpensApp {
+    func perform() async throws -> some IntentResult {
         NotificationCenter.default.post(
             name: .openChallenge,
             object: nil,

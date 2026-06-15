@@ -2,6 +2,7 @@ import SwiftUI
 import BackgroundTasks
 import CoreSpotlight
 import UserNotifications
+import AppIntents
 
 // MARK: - Shared UI Components
 
@@ -66,12 +67,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         BackgroundTaskScheduler.registerTasks()
         UNUserNotificationCenter.current().delegate = self
+        // Register App Shortcuts with Siri. Must be called on every launch so
+        // iOS keeps the phrase list current. Without this call the shortcuts
+        // exist in code but are never surfaced in Siri or the Shortcuts app.
+        ChallengesShortcuts.updateAppShortcutParameters()
         // Re-request HealthKit authorization on every launch. HealthKit only presents
         // the permission dialog for types not yet requested, so this is a no-op for
         // users who already have all permissions. It silently picks up any new types
         // added to HealthKitManager.readTypes (e.g. distanceWalkingRunning) for users
         // who onboarded before the new type was added.
-        Task { try? await HealthKitManager.shared.requestAuthorization() }
+        Task {
+            try? await HealthKitManager.shared.requestAuthorization()
+            // Register HealthKit background delivery so iOS wakes the app to sync scores
+            // when new activity data arrives, without the user opening the app.
+            await HealthKitManager.shared.startBackgroundDelivery()
+        }
         return true
     }
 

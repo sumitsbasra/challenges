@@ -7,7 +7,7 @@ struct CreateChallengeIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     @MainActor
-    func perform() async throws -> some OpensApp {
+    func perform() async throws -> some IntentResult {
         NotificationCenter.default.post(name: .openNewChallenge, object: nil)
         return .result()
     }

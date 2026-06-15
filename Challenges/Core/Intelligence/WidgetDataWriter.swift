@@ -32,6 +32,13 @@ enum WidgetDataWriter {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
+    /// Clears the widget state so the placeholder is shown when there is no active challenge.
+    static func clear() {
+        guard let defaults = UserDefaults(suiteName: suiteName) else { return }
+        defaults.removeObject(forKey: key)
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     static func read() -> WidgetState? {
         guard let defaults = UserDefaults(suiteName: suiteName),
               let data = defaults.data(forKey: key),

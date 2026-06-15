@@ -42,7 +42,11 @@ struct ChallengeEntityQuery: EntityQuery, EntityStringQuery {
     /// Resolves a specific list of known entity IDs — called when Siri already
     /// has an entity reference (e.g. from a donated NSUserActivity).
     func entities(for identifiers: [String]) async throws -> [ChallengeEntity] {
-        let userID = await MainActor.run { UserSession.shared.userID } ?? ""
+        // No signed-in user (e.g. AppIntents indexing this query at launch before
+        // sign-in): return nothing rather than hitting CloudKit with an empty id,
+        // which would throw in CKRecord.ID(recordName:) and crash the app.
+        let currentUserID = await MainActor.run { UserSession.shared.userID }
+        guard let userID = currentUserID, !userID.isEmpty else { return [] }
         let all = try await CloudKitManager.shared.fetchChallenges(forUserID: userID)
         return all
             .filter { identifiers.contains($0.id) }
@@ -54,7 +58,11 @@ struct ChallengeEntityQuery: EntityQuery, EntityStringQuery {
     /// Fuzzy name search — called when Siri needs to disambiguate a spoken name
     /// (e.g. "my summer challenge") into a specific entity.
     func entities(matching string: String) async throws -> [ChallengeEntity] {
-        let userID = await MainActor.run { UserSession.shared.userID } ?? ""
+        // No signed-in user (e.g. AppIntents indexing this query at launch before
+        // sign-in): return nothing rather than hitting CloudKit with an empty id,
+        // which would throw in CKRecord.ID(recordName:) and crash the app.
+        let currentUserID = await MainActor.run { UserSession.shared.userID }
+        guard let userID = currentUserID, !userID.isEmpty else { return [] }
         let all = try await CloudKitManager.shared.fetchChallenges(forUserID: userID)
         let lower = string.lowercased()
         return all
@@ -66,7 +74,11 @@ struct ChallengeEntityQuery: EntityQuery, EntityStringQuery {
 
     /// Shown in the Shortcuts app picker and offered as Siri proactive suggestions.
     func suggestedEntities() async throws -> [ChallengeEntity] {
-        let userID = await MainActor.run { UserSession.shared.userID } ?? ""
+        // No signed-in user (e.g. AppIntents indexing this query at launch before
+        // sign-in): return nothing rather than hitting CloudKit with an empty id,
+        // which would throw in CKRecord.ID(recordName:) and crash the app.
+        let currentUserID = await MainActor.run { UserSession.shared.userID }
+        guard let userID = currentUserID, !userID.isEmpty else { return [] }
         let all = try await CloudKitManager.shared.fetchChallenges(forUserID: userID)
         // Prioritise active, then pending; omit completed.
         return all

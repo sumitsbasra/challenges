@@ -3,11 +3,20 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 100;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		548BBE252F6FEDC9005D7958 /* challenges.icon in Resources */ = {isa = PBXBuildFile; fileRef = 548BBE242F6FEDC9005D7958 /* challenges.icon */; };
+		548FF42C2F80D9FC00C2495A /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1000054 /* WidgetKit.framework */; };
+		548FF42E2F80D9FC00C2495A /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 548FF42D2F80D9FC00C2495A /* SwiftUI.framework */; };
+		548FF43D2F80D9FD00C2495A /* challenges widgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 548FF42B2F80D9FC00C2495A /* challenges widgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		548FF4592F80DF9E00C2495A /* ChallengeEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548FF4522F80DF9E00C2495A /* ChallengeEntity.swift */; };
+		548FF45A2F80DF9E00C2495A /* ShowChallengeIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548FF4572F80DF9E00C2495A /* ShowChallengeIntent.swift */; };
+		548FF45B2F80DF9E00C2495A /* GetActiveChallengesIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548FF4562F80DF9E00C2495A /* GetActiveChallengesIntent.swift */; };
+		548FF45C2F80DF9E00C2495A /* ChallengesShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548FF4532F80DF9E00C2495A /* ChallengesShortcuts.swift */; };
+		548FF45D2F80DF9E00C2495A /* CheckMyRankIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548FF4542F80DF9E00C2495A /* CheckMyRankIntent.swift */; };
+		548FF45E2F80DF9E00C2495A /* CreateChallengeIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548FF4552F80DF9E00C2495A /* CreateChallengeIntent.swift */; };
 		54EE9B242F6E503F006D8B83 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 54EE9B232F6E503F006D8B83 /* README.md */; };
 		A1000001 /* ChallengesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001 /* ChallengesApp.swift */; };
 		A1000002 /* AppUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000002 /* AppUser.swift */; };
@@ -65,10 +74,60 @@
 		A1000061 /* ParticipationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000061 /* ParticipationCache.swift */; };
 		A1000062 /* AvatarCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000062 /* AvatarCache.swift */; };
 		A1000070 /* NotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000070 /* NotificationScheduler.swift */; };
+		A1000071 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000071 /* HomeViewModel.swift */; };
+		A1000072 /* HomeChallengeRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000072 /* HomeChallengeRows.swift */; };
+		TB000001 /* PointsCalculatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TF000001 /* PointsCalculatorTests.swift */; };
+		TB000002 /* ScoreAggregatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TF000002 /* ScoreAggregatorTests.swift */; };
+		TB000003 /* ChallengeCountdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TF000003 /* ChallengeCountdownTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		548FF43B2F80D9FD00C2495A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F0000099 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 548FF42A2F80D9FC00C2495A;
+			remoteInfo = "challenges widgetExtension";
+		};
+		548FF4442F80DA6000C2495A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F0000099 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 548FF42A2F80D9FC00C2495A;
+			remoteInfo = "challenges widgetExtension";
+		};
+		TD000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F0000099 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F0000001;
+			remoteInfo = Challenges;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		548FF4422F80D9FD00C2495A /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				548FF43D2F80D9FD00C2495A /* challenges widgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		548BBE242F6FEDC9005D7958 /* challenges.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = challenges.icon; sourceTree = "<group>"; };
+		548FF42B2F80D9FC00C2495A /* challenges widgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "challenges widgetExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		548FF42D2F80D9FC00C2495A /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		548FF4432F80DA3F00C2495A /* challenges widgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "challenges widgetExtension.entitlements"; sourceTree = "<group>"; };
+		548FF4522F80DF9E00C2495A /* ChallengeEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeEntity.swift; sourceTree = "<group>"; };
+		548FF4532F80DF9E00C2495A /* ChallengesShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengesShortcuts.swift; sourceTree = "<group>"; };
+		548FF4542F80DF9E00C2495A /* CheckMyRankIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckMyRankIntent.swift; sourceTree = "<group>"; };
+		548FF4552F80DF9E00C2495A /* CreateChallengeIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateChallengeIntent.swift; sourceTree = "<group>"; };
+		548FF4562F80DF9E00C2495A /* GetActiveChallengesIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetActiveChallengesIntent.swift; sourceTree = "<group>"; };
+		548FF4572F80DF9E00C2495A /* ShowChallengeIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowChallengeIntent.swift; sourceTree = "<group>"; };
 		54EE9B232F6E503F006D8B83 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		B1000001 /* ChallengesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengesApp.swift; sourceTree = "<group>"; };
 		B1000002 /* AppUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUser.swift; sourceTree = "<group>"; };
@@ -128,13 +187,46 @@
 		B1000061 /* ParticipationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipationCache.swift; sourceTree = "<group>"; };
 		B1000062 /* AvatarCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarCache.swift; sourceTree = "<group>"; };
 		B1000070 /* NotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduler.swift; sourceTree = "<group>"; };
+		B1000071 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
+		B1000072 /* HomeChallengeRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeChallengeRows.swift; sourceTree = "<group>"; };
 		C0000001 /* Challenges.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Challenges.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		TF000001 /* PointsCalculatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsCalculatorTests.swift; sourceTree = "<group>"; };
+		TF000002 /* ScoreAggregatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreAggregatorTests.swift; sourceTree = "<group>"; };
+		TF000003 /* ChallengeCountdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeCountdownTests.swift; sourceTree = "<group>"; };
+		TF0000P0 /* ChallengesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChallengesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		548FF43E2F80D9FD00C2495A /* Exceptions for "challenges widget" folder in "challenges widgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 548FF42A2F80D9FC00C2495A /* challenges widgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		548FF42F2F80D9FC00C2495A /* challenges widget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				548FF43E2F80D9FD00C2495A /* Exceptions for "challenges widget" folder in "challenges widgetExtension" target */,
+			);
+			path = "challenges widget";
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
+		548FF4282F80D9FC00C2495A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				548FF42E2F80D9FC00C2495A /* SwiftUI.framework in Frameworks */,
+				548FF42C2F80D9FC00C2495A /* WidgetKit.framework in Frameworks */,
+			);
+		};
 		D0000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				A1000050 /* HealthKit.framework in Frameworks */,
 				A1000051 /* CloudKit.framework in Frameworks */,
@@ -142,16 +234,36 @@
 				A1000053 /* BackgroundTasks.framework in Frameworks */,
 				A1000054 /* WidgetKit.framework in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
+		};
+		TS000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		548FF4582F80DF9E00C2495A /* AppIntents */ = {
+			isa = PBXGroup;
+			children = (
+				548FF4522F80DF9E00C2495A /* ChallengeEntity.swift */,
+				548FF4532F80DF9E00C2495A /* ChallengesShortcuts.swift */,
+				548FF4542F80DF9E00C2495A /* CheckMyRankIntent.swift */,
+				548FF4552F80DF9E00C2495A /* CreateChallengeIntent.swift */,
+				548FF4562F80DF9E00C2495A /* GetActiveChallengesIntent.swift */,
+				548FF4572F80DF9E00C2495A /* ShowChallengeIntent.swift */,
+			);
+			path = AppIntents;
+			sourceTree = "<group>";
+		};
 		E0000000 = {
 			isa = PBXGroup;
 			children = (
+				548FF4432F80DA3F00C2495A /* challenges widgetExtension.entitlements */,
 				548BBE242F6FEDC9005D7958 /* challenges.icon */,
 				E0000001 /* Challenges */,
+				548FF42F2F80D9FC00C2495A /* challenges widget */,
+				TG000001 /* ChallengesTests */,
 				E0000002 /* Frameworks */,
 				E0000003 /* Products */,
 			);
@@ -160,6 +272,7 @@
 		E0000001 /* Challenges */ = {
 			isa = PBXGroup;
 			children = (
+				548FF4582F80DF9E00C2495A /* AppIntents */,
 				B1000001 /* ChallengesApp.swift */,
 				54EE9B232F6E503F006D8B83 /* README.md */,
 				E0000010 /* Models */,
@@ -181,6 +294,7 @@
 				B1000052 /* AuthenticationServices.framework */,
 				B1000053 /* BackgroundTasks.framework */,
 				B1000054 /* WidgetKit.framework */,
+				548FF42D2F80D9FC00C2495A /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -189,6 +303,8 @@
 			isa = PBXGroup;
 			children = (
 				C0000001 /* Challenges.app */,
+				548FF42B2F80D9FC00C2495A /* challenges widgetExtension.appex */,
+				TF0000P0 /* ChallengesTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -392,6 +508,8 @@
 			isa = PBXGroup;
 			children = (
 				B1000059 /* HomeView.swift */,
+				B1000071 /* HomeViewModel.swift */,
+				B1000072 /* HomeChallengeRows.swift */,
 			);
 			path = Home;
 			sourceTree = "<group>";
@@ -414,9 +532,37 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		TG000001 /* ChallengesTests */ = {
+			isa = PBXGroup;
+			children = (
+				TF000001 /* PointsCalculatorTests.swift */,
+				TF000002 /* ScoreAggregatorTests.swift */,
+				TF000003 /* ChallengeCountdownTests.swift */,
+			);
+			path = ChallengesTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		548FF42A2F80D9FC00C2495A /* challenges widgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 548FF43F2F80D9FD00C2495A /* Build configuration list for PBXNativeTarget "challenges widgetExtension" */;
+			buildPhases = (
+				548FF4272F80D9FC00C2495A /* Sources */,
+				548FF4282F80D9FC00C2495A /* Frameworks */,
+				548FF4292F80D9FC00C2495A /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				548FF42F2F80D9FC00C2495A /* challenges widget */,
+			);
+			name = "challenges widgetExtension";
+			productName = "challenges widgetExtension";
+			productReference = 548FF42B2F80D9FC00C2495A /* challenges widgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		F0000001 /* Challenges */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F0000010 /* Build configuration list for PBXNativeTarget "Challenges" */;
@@ -424,15 +570,35 @@
 				F0000002 /* Sources */,
 				D0000001 /* Frameworks */,
 				F0000003 /* Resources */,
+				548FF4422F80D9FD00C2495A /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				548FF43C2F80D9FD00C2495A /* PBXTargetDependency */,
+				548FF4452F80DA6000C2495A /* PBXTargetDependency */,
 			);
 			name = Challenges;
 			productName = Challenges;
 			productReference = C0000001 /* Challenges.app */;
 			productType = "com.apple.product-type.application";
+		};
+		TN000001 /* ChallengesTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = TC000001 /* Build configuration list for PBXNativeTarget "ChallengesTests" */;
+			buildPhases = (
+				TS000001 /* Sources */,
+				TS000002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				TD000001 /* PBXTargetDependency */,
+			);
+			name = ChallengesTests;
+			productName = ChallengesTests;
+			productReference = TF0000P0 /* ChallengesTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -441,16 +607,22 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1500;
+				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
+					548FF42A2F80D9FC00C2495A = {
+						CreatedOnToolsVersion = 26.4;
+					};
 					F0000001 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					TN000001 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = F0000001;
 					};
 				};
 			};
 			buildConfigurationList = F0000020 /* Build configuration list for PBXProject "Challenges" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -458,31 +630,41 @@
 				Base,
 			);
 			mainGroup = E0000000;
+			preferredProjectObjectVersion = 100;
 			productRefGroup = E0000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				F0000001 /* Challenges */,
+				548FF42A2F80D9FC00C2495A /* challenges widgetExtension */,
+				TN000001 /* ChallengesTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		548FF4292F80D9FC00C2495A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		F0000003 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				548BBE252F6FEDC9005D7958 /* challenges.icon in Resources */,
 				54EE9B242F6E503F006D8B83 /* README.md in Resources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		548FF4272F80D9FC00C2495A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 		F0000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				A1000001 /* ChallengesApp.swift in Sources */,
 				A1000002 /* AppUser.swift in Sources */,
@@ -504,6 +686,12 @@
 				A1000018 /* SyncCoordinator.swift in Sources */,
 				A1000019 /* BackgroundTaskScheduler.swift in Sources */,
 				A1000070 /* NotificationScheduler.swift in Sources */,
+				548FF4592F80DF9E00C2495A /* ChallengeEntity.swift in Sources */,
+				548FF45A2F80DF9E00C2495A /* ShowChallengeIntent.swift in Sources */,
+				548FF45B2F80DF9E00C2495A /* GetActiveChallengesIntent.swift in Sources */,
+				548FF45C2F80DF9E00C2495A /* ChallengesShortcuts.swift in Sources */,
+				548FF45D2F80DF9E00C2495A /* CheckMyRankIntent.swift in Sources */,
+				548FF45E2F80DF9E00C2495A /* CreateChallengeIntent.swift in Sources */,
 				A1000020 /* SubscriptionHandler.swift in Sources */,
 				A1000021 /* FitnessColors.swift in Sources */,
 				A1000022 /* Typography.swift in Sources */,
@@ -532,23 +720,118 @@
 				A1000057 /* FitnessFormCard.swift in Sources */,
 				A1000058 /* TodayView.swift in Sources */,
 				A1000059 /* HomeView.swift in Sources */,
+				A1000071 /* HomeViewModel.swift in Sources */,
+				A1000072 /* HomeChallengeRows.swift in Sources */,
 				A1000060 /* ChallengeCache.swift in Sources */,
 				A1000061 /* ParticipationCache.swift in Sources */,
 				A1000062 /* AvatarCache.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
+		};
+		TS000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				TB000001 /* PointsCalculatorTests.swift in Sources */,
+				TB000002 /* ScoreAggregatorTests.swift in Sources */,
+				TB000003 /* ChallengeCountdownTests.swift in Sources */,
+			);
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		548FF43C2F80D9FD00C2495A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 548FF42A2F80D9FC00C2495A /* challenges widgetExtension */;
+			targetProxy = 548FF43B2F80D9FD00C2495A /* PBXContainerItemProxy */;
+		};
+		548FF4452F80DA6000C2495A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 548FF42A2F80D9FC00C2495A /* challenges widgetExtension */;
+			targetProxy = 548FF4442F80DA6000C2495A /* PBXContainerItemProxy */;
+		};
+		TD000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F0000001 /* Challenges */;
+			targetProxy = TD000002 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		F0000011 /* Debug */ = {
+		548FF4402F80D9FD00C2495A /* Debug configuration for PBXNativeTarget "challenges widgetExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = "challenges widgetExtension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "challenges widget/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "challenges widget";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "studio.ssb.challenges.challenges-widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		548FF4412F80D9FD00C2495A /* Release configuration for PBXNativeTarget "challenges widgetExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = "challenges widgetExtension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "challenges widget/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "challenges widget";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = "studio.ssb.challenges.challenges-widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F0000011 /* Debug configuration for PBXNativeTarget "Challenges" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = challenges;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = Challenges/Resources/Challenges.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Challenges/Resources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Challenges;
@@ -558,7 +841,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = studio.ssb.challenges;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -567,14 +850,16 @@
 			};
 			name = Debug;
 		};
-		F0000012 /* Release */ = {
+		F0000012 /* Release configuration for PBXNativeTarget "Challenges" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = challenges;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = Challenges/Resources/Challenges.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JXMDR8ZMM7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Challenges/Resources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Challenges;
@@ -584,16 +869,17 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = studio.ssb.challenges;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
-		F0000021 /* Debug */ = {
+		F0000021 /* Debug configuration for PBXProject "Challenges" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -657,7 +943,7 @@
 			};
 			name = Debug;
 		};
-		F0000022 /* Release */ = {
+		F0000022 /* Release configuration for PBXProject "Challenges" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -714,25 +1000,77 @@
 			};
 			name = Release;
 		};
+		TC000002 /* Debug configuration for PBXNativeTarget "ChallengesTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JXMDR8ZMM7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.ssb.challenges.ChallengesTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Challenges.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Challenges";
+			};
+			name = Debug;
+		};
+		TC000003 /* Release configuration for PBXNativeTarget "ChallengesTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JXMDR8ZMM7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.ssb.challenges.ChallengesTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Challenges.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Challenges";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		548FF43F2F80D9FD00C2495A /* Build configuration list for PBXNativeTarget "challenges widgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				548FF4402F80D9FD00C2495A /* Debug configuration for PBXNativeTarget "challenges widgetExtension" */,
+				548FF4412F80D9FD00C2495A /* Release configuration for PBXNativeTarget "challenges widgetExtension" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		F0000010 /* Build configuration list for PBXNativeTarget "Challenges" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				F0000011 /* Debug */,
-				F0000012 /* Release */,
+				F0000011 /* Debug configuration for PBXNativeTarget "Challenges" */,
+				F0000012 /* Release configuration for PBXNativeTarget "Challenges" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		F0000020 /* Build configuration list for PBXProject "Challenges" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				F0000021 /* Debug */,
-				F0000022 /* Release */,
+				F0000021 /* Debug configuration for PBXProject "Challenges" */,
+				F0000022 /* Release configuration for PBXProject "Challenges" */,
 			);
-			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		TC000001 /* Build configuration list for PBXNativeTarget "ChallengesTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				TC000002 /* Debug configuration for PBXNativeTarget "ChallengesTests" */,
+				TC000003 /* Release configuration for PBXNativeTarget "ChallengesTests" */,
+			);
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

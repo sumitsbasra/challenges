@@ -42,14 +42,20 @@ final class GoalResolver {
     // MARK: - Watch goals (from HKActivitySummary)
 
     /// Returns the user's personalized move (calorie) goal from the most recent
-    /// available HKActivitySummary. Falls back to 400 kcal if unavailable.
+    /// available HKActivitySummary, looking back up to 7 days.
+    ///
+    /// Today's summary often hasn't synced from Apple Watch yet (Watch pushes
+    /// summaries in batches). Looking back a week reliably finds a recent goal
+    /// without a network round-trip. Falls back to 400 kcal only if no summary
+    /// exists at all (e.g. Watch has never been paired).
     func moveGoal() async -> Double {
         await withCheckedContinuation { continuation in
             let calendar = Calendar.current
             let today = calendar.startOfDay(for: Date())
+            let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: today) ?? today
             let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? Date(timeInterval: 86400, since: today)
 
-            var startComponents = calendar.dateComponents([.year, .month, .day], from: today)
+            var startComponents = calendar.dateComponents([.year, .month, .day], from: sevenDaysAgo)
             startComponents.calendar = calendar
             var endComponents = calendar.dateComponents([.year, .month, .day], from: tomorrow)
             endComponents.calendar = calendar
@@ -57,10 +63,16 @@ final class GoalResolver {
                                               end: endComponents)
 
             let query = HKActivitySummaryQuery(predicate: predicate) { _, summaries, _ in
-                let goal = summaries?.first?.activeEnergyBurnedGoal.doubleValue(for: .kilocalorie()) ?? 400
+                // Use the most recent summary's goal (sort descending by date).
+                let sorted = (summaries ?? []).sorted {
+                    let d0 = calendar.date(from: $0.dateComponents(for: calendar)) ?? .distantPast
+                    let d1 = calendar.date(from: $1.dateComponents(for: calendar)) ?? .distantPast
+                    return d0 > d1
+                }
+                let goal = sorted.first?.activeEnergyBurnedGoal.doubleValue(for: .kilocalorie()) ?? 400
                 continuation.resume(returning: max(goal, 1))
             }
-            healthStore.execute(query)
+            self.healthStore.execute(query)
         }
     }
 }

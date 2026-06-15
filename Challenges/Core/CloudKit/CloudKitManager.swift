@@ -77,9 +77,15 @@ final class CloudKitManager: ObservableObject {
     }
 
     /// Updates the challenge status field only (avoids overwriting other fields set remotely).
+    ///
+    /// Every client that opens the app races to apply lifecycle transitions
+    /// (pending→active, active→completed). To avoid redundant writes, this skips the
+    /// save when the server record already carries the target status — so only the
+    /// first client across the boundary actually writes; the rest no-op.
     func updateChallengeStatus(_ challengeID: String, status: ChallengeStatus) async throws {
         let recordID = CKRecord.ID(recordName: challengeID)
         let record = try await publicDB.record(for: recordID)
+        guard (record["status"] as? String) != status.rawValue else { return }
         record["status"] = status.rawValue
         _ = try await publicDB.save(record)
     }
@@ -113,6 +119,10 @@ final class CloudKitManager: ObservableObject {
 
     /// Fetches all challenges the current user created or joined.
     func fetchChallenges(forUserID userID: String) async throws -> [Challenge] {
+        // CKRecord.ID(recordName:) raises an (uncatchable) NSException on an empty
+        // string. AppIntents calls this via suggestedEntities()/entities(matching:)
+        // during Shortcuts indexing before a user is signed in, so guard explicitly.
+        guard !userID.isEmpty else { return [] }
         let userRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: userID), action: .none)
         let createQuery = CKQuery(recordType: RecordMapper.RecordType.challenge,
                                   predicate: NSPredicate(format: "creatorRef == %@", userRef))

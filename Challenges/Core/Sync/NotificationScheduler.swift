@@ -83,14 +83,14 @@ enum NotificationScheduler {
 
     // MARK: - Per-challenge lifecycle builders
 
-    /// 9 AM the day before the challenge starts — "starts tomorrow".
+    /// 5 PM the day before the challenge starts — "starts tomorrow".
     private static func startingRequest(for challenge: Challenge, prefs: NotificationPrefs) -> UNNotificationRequest? {
         guard prefs.challengeStarting,
-              let fireDate = atHour(9, onDayBefore: challenge.startDate) else { return nil }
+              let fireDate = atHour(17, onDayBefore: challenge.startDate) else { return nil }
 
         let content = UNMutableNotificationContent()
-        content.title = "Challenge starts tomorrow 🔥"
-        content.body  = "\(challenge.title) kicks off tomorrow. Get ready to close your rings!"
+        content.title = "Challenge starts \(noHyphen("tomorrow")) 🔥"
+        content.body  = startingBodies[stableIndex(challenge.id, count: startingBodies.count)](challenge)
         content.sound = .default
         content.userInfo = ["challengeID": challenge.id]
 
@@ -127,15 +127,15 @@ enum NotificationScheduler {
         return request(id: "ch-lastday-\(challenge.id)", content: content, fireDate: fireDate)
     }
 
-    /// 1 hour after the challenge ends — "see your final results".
+    /// 9 AM the day after the challenge ends — "see your final results".
     private static func finalRequest(for challenge: Challenge, prefs: NotificationPrefs) -> UNNotificationRequest? {
-        guard prefs.finalStandings else { return nil }
-        let fireDate = challenge.endDate.addingTimeInterval(3600)
-        guard fireDate > Date() else { return nil }
+        guard prefs.finalStandings,
+              let fireDate = atHour(9, onDayAfter: challenge.endDate),
+              fireDate > Date() else { return nil }
 
         let content = UNMutableNotificationContent()
         content.title = "Challenge complete 🏆"
-        content.body  = "\(challenge.title) has ended. See where you finished!"
+        content.body  = completeBodies[stableIndex(challenge.id, count: completeBodies.count)](challenge)
         content.sound = .default
         content.userInfo = ["challengeID": challenge.id]
 
@@ -179,12 +179,16 @@ enum NotificationScheduler {
                 if let fireDate = cal.date(from: comps), fireDate > now {
                     let content = UNMutableNotificationContent()
                     content.sound = .default
+                    // Rotate the copy by day-of-year so consecutive days differ.
+                    let dayOfYear = cal.ordinality(of: .day, in: .year, for: day) ?? 0
                     if running.count == 1 {
-                        content.title = "Keep pushing! 💪"
-                        content.body  = "Check your standings in \(running[0].title)."
+                        let pick = dailySingle[dayOfYear % dailySingle.count]
+                        content.title = pick.title
+                        content.body  = pick.body(running[0].title)
                     } else {
-                        content.title = "Stay on top 🏆"
-                        content.body  = "You're in \(running.count) active challenges. Time to close those rings!"
+                        let pick = dailyMultiple[dayOfYear % dailyMultiple.count]
+                        content.title = pick.title
+                        content.body  = pick.body(running.count)
                     }
                     requests.append(request(
                         id:       "ch-daily-\(isoDay(day))",
@@ -202,6 +206,59 @@ enum NotificationScheduler {
 
     // MARK: - Helpers
 
+    // MARK: - Copy pools
+
+    /// "Challenge starts tomorrow" body variants. Picked per-challenge for variety.
+    private static let startingBodies: [(Challenge) -> String] = [
+        { "\($0.title) is up next. Get ready to close your rings!" },
+        { "Get ready, \($0.title) is about to begin. Time to close some rings!" },
+        { "\($0.title) is almost here. Rest up and prep those rings!" },
+    ]
+
+    /// "Challenge complete" body variants. Picked per-challenge for variety.
+    private static let completeBodies: [(Challenge) -> String] = [
+        { "See where you finished in \($0.title)!" },
+        { "The results are in for \($0.title). Check your rank!" },
+        { "\($0.title) is a wrap. See how you stacked up!" },
+    ]
+
+    /// Daily reminder variants when the user is in exactly one challenge (passes its title).
+    private static let dailySingle: [(title: String, body: (String) -> String)] = [
+        ("Keep pushing! 💪",       { "Check your standings in \($0)." }),
+        ("How are your rings? ⭕️", { "A few moves now protects your spot in \($0)." }),
+        ("Don't lose ground 🔥",   { "Close your rings to climb in \($0)." }),
+        ("Your move 👟",           { "Every ring counts in \($0) today." }),
+        ("Climb the board 📈",     { "Log some activity for \($0) and gain ground." }),
+    ]
+
+    /// Daily reminder variants when the user is in multiple challenges (passes the count).
+    private static let dailyMultiple: [(title: String, body: (Int) -> String)] = [
+        ("Stay on top 🏆",                 { "You're in \($0) challenges. Time to close those rings!" }),
+        ("Big day ahead 💪",               { "\($0) challenges are counting on you. Get moving!" }),
+        ("Keep the momentum 🔥",           { "Rack up points across all \($0) challenges today." }),
+        ("Lead the pack 📈",               { _ in "A little activity now lifts you in every challenge." }),
+        ("Rings won't close themselves ⭕️", { "You've got \($0) challenges in play. Make them count!" }),
+    ]
+
+    /// Deterministic, launch-stable index into a pool of `count` from an arbitrary string
+    /// (djb2 hash). Same input always maps to the same slot, so a given challenge keeps
+    /// consistent copy across reschedules while different challenges vary.
+    private static func stableIndex(_ string: String, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        var hash: UInt64 = 5381
+        for byte in string.utf8 { hash = (hash &* 33) &+ UInt64(byte) }
+        return Int(hash % UInt64(count))
+    }
+
+    /// Inserts zero-width word-joiner characters (U+2060) between every letter of `word`
+    /// so the system text renderer can't hyphenate it mid-word. On narrow layouts like
+    /// the Apple Watch this makes the whole word wrap to the next line ("tomorrow")
+    /// instead of splitting it ("to-morrow"). The joiners are invisible and have no
+    /// effect where the word already fits (e.g. the iPhone).
+    private static func noHyphen(_ word: String) -> String {
+        word.map(String.init).joined(separator: "\u{2060}")
+    }
+
     private static func request(id: String, content: UNMutableNotificationContent, fireDate: Date) -> UNNotificationRequest {
         let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
@@ -214,6 +271,16 @@ enum NotificationScheduler {
         var comps = cal.dateComponents([.year, .month, .day], from: date)
         comps.hour = hour
         return cal.date(from: comps)
+    }
+
+    /// Returns `hour`:00 on the calendar day after `date`, or nil if already past.
+    private static func atHour(_ hour: Int, onDayAfter date: Date) -> Date? {
+        let cal = Calendar.current
+        guard let dayAfter = cal.date(byAdding: .day, value: 1, to: date) else { return nil }
+        var comps = cal.dateComponents([.year, .month, .day], from: dayAfter)
+        comps.hour = hour
+        guard let result = cal.date(from: comps), result > Date() else { return nil }
+        return result
     }
 
     /// Returns `hour`:00 on the calendar day before `date`, or nil if already past.

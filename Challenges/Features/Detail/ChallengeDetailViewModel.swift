@@ -44,21 +44,7 @@ final class ChallengeDetailViewModel {
     }
 
     var countdownText: String {
-        let cal  = Calendar.current
-        let now  = Date()
-        switch challenge.status {
-        case .pending:
-            let days = cal.dateComponents([.day],
-                from: cal.startOfDay(for: now),
-                to:   cal.startOfDay(for: challenge.startDate)).day ?? 0
-            return days == 0 ? "Starts today" : "Starts in \(days) day\(days == 1 ? "" : "s")"
-        case .active:
-            if cal.isDateInToday(challenge.endDate)    { return "Ends today" }
-            if cal.isDateInTomorrow(challenge.endDate) { return "Ends tomorrow" }
-            return "Ongoing"
-        case .completed:
-            return "Completed"
-        }
+        challenge.countdownText()
     }
 
     // MARK: - Local status transition
@@ -105,8 +91,16 @@ final class ChallengeDetailViewModel {
         // Capture the returned scores so we can inject them directly into the
         // UI without relying on a CloudKit read-after-write (which may miss
         // records that were just saved due to eventual consistency).
+        //
+        // We sync for completed challenges too, not just active ones. A completed
+        // challenge is never touched by the home-screen sync, so any day that wasn't
+        // synced while it was active (user didn't open the app that day, joined late,
+        // or a back-dated challenge) would otherwise show 0 points forever. All of a
+        // completed challenge's days are in the past, so syncChallenge backfills them
+        // from HealthKit once and then no-ops on later opens (it skips days that
+        // already have points).
         var mySyncedScores: [DailyScore] = []
-        if challenge.status == .active {
+        if challenge.status != .pending {
             mySyncedScores = await SyncCoordinator.shared.syncChallenge(challenge)
         }
 
@@ -217,7 +211,7 @@ final class ChallengeDetailViewModel {
         async let standTask    = fetcher.standHours(on: today)
         async let distanceTask = fetcher.distanceMeters(on: today)
         let (steps, energy, exercise, stand, distance) =
-            await (stepsTask, energyTask, exerciseTask, standTask, distanceTask)
+            await (stepsTask ?? 0, energyTask ?? 0, exerciseTask ?? 0, standTask ?? 0, distanceTask ?? 0)
 
         var updatedRingData: RingData
         var points: Double

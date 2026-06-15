@@ -15,11 +15,12 @@ struct RankWidgetView: View {
     // MARK: - Loaded State
 
     private func loadedView(_ state: WidgetState) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let ended = state.daysRemaining <= 0
+        return VStack(alignment: .leading, spacing: 4) {
             // Challenge name + icon
-            HStack {
-                Image(systemName: "trophy.fill")
-                    .foregroundStyle(.yellow)
+            HStack(spacing: 4) {
+                Image(systemName: ended ? "flag.checkered" : "trophy.fill")
+                    .foregroundStyle(ended ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.yellow))
                     .font(.caption)
                 Text(state.challengeTitle)
                     .font(.caption.weight(.semibold))
@@ -29,31 +30,39 @@ struct RankWidgetView: View {
 
             // Rank (large)
             Text("#\(state.rank)")
-                .font(.system(size: 40, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .font(.system(size: 38, weight: .bold, design: .rounded))
+                .foregroundStyle(ended ? AnyShapeStyle(
+                    .secondary) : AnyShapeStyle(Color.white))
                 .monospacedDigit()
 
             // Points
             Text("\(Int(state.totalPoints)) pts")
                 .font(.subheadline.weight(.semibold))
-                // Exercise ring green: #92E82A
-                .foregroundStyle(Color(red: 0.573, green: 0.910, blue: 0.165))
+                .foregroundStyle(
+                    ended
+                        ? AnyShapeStyle(.secondary)
+                        : AnyShapeStyle(Color(red: 0.573, green: 0.910, blue: 0.165))
+                )
 
             Spacer()
 
-            // Days remaining
-            HStack(spacing: 4) {
-                Image(systemName: "clock")
-                    .font(.caption2)
-                Text("\(state.daysRemaining)d left")
-                    .font(.caption2)
+            // Status footer
+            if ended {
+                Text("Challenge ended")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.caption2)
+                    Text("\(state.daysRemaining)d left")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.secondary)
             }
-            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
-        // Tapping the widget deep-links into the challenge detail view.
-        // ChallengesApp.swift handles challenges://challenge/<id> via onOpenURL.
         .widgetURL(URL(string: "challenges://challenge/\(state.challengeID)")!)
     }
 

@@ -32,3 +32,38 @@ struct Challenge: Identifiable, Codable, Hashable {
         hasher.combine(status)
     }
 }
+
+// MARK: - Countdown formatting
+
+extension Challenge {
+    /// Whole calendar days from `now` until the challenge starts (clamped at 0).
+    func daysUntilStart(now: Date = Date(), calendar: Calendar = .current) -> Int {
+        max(0, calendar.dateComponents([.day],
+            from: calendar.startOfDay(for: now),
+            to: calendar.startOfDay(for: startDate)).day ?? 0)
+    }
+
+    /// "Starts today" / "Starts tomorrow" / "Starts in N days" for a pending challenge.
+    /// Single source of truth so the home row badge and the detail header never drift.
+    func startCountdownText(now: Date = Date(), calendar: Calendar = .current) -> String {
+        switch daysUntilStart(now: now, calendar: calendar) {
+        case 0:  return "Starts today"
+        case 1:  return "Starts tomorrow"
+        case let days: return "Starts in \(days) days"
+        }
+    }
+
+    /// Full status-aware countdown used by the detail header.
+    func countdownText(now: Date = Date(), calendar: Calendar = .current) -> String {
+        switch status {
+        case .pending:
+            return startCountdownText(now: now, calendar: calendar)
+        case .active:
+            if calendar.isDateInToday(endDate)    { return "Ends today" }
+            if calendar.isDateInTomorrow(endDate) { return "Ends tomorrow" }
+            return "Ongoing"
+        case .completed:
+            return "Completed"
+        }
+    }
+}

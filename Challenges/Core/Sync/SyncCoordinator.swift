@@ -154,8 +154,23 @@ actor SyncCoordinator {
             async let exerciseTask = fetcher.exerciseMinutes(on: day)
             async let standTask    = fetcher.standHours(on: day)
             async let distanceTask = fetcher.distanceMeters(on: day)
-            let (steps, energy, exercise, stand, distance) =
+            let (stepsOpt, energyOpt, exerciseOpt, standOpt, distanceOpt) =
                 await (stepsTask, energyTask, exerciseTask, standTask, distanceTask)
+
+            // A nil from a fetcher means HealthKit errored (not a genuine zero).
+            // For a *past* day being backfilled, if every metric failed to read,
+            // skip it rather than persisting a bogus 0 that would stick (past days
+            // with pts > 0 are never re-synced). Today always re-syncs, so a transient
+            // failure there self-heals on the next sync.
+            let allFailed = stepsOpt == nil && energyOpt == nil
+                && exerciseOpt == nil && standOpt == nil
+            if allFailed && !calendar.isDateInToday(day) { continue }
+
+            let steps    = stepsOpt    ?? 0
+            let energy   = energyOpt   ?? 0
+            let exercise = exerciseOpt ?? 0
+            let stand    = standOpt    ?? 0
+            let distance = distanceOpt ?? 0
 
             var points: Double
             var ringData: RingData
@@ -262,7 +277,17 @@ actor SyncCoordinator {
     /// Writes the top active challenge's rank and score to shared App Group UserDefaults
     /// so the widget can display current standings without a CloudKit fetch.
     private func updateWidgetState(userID: String, activeChallenges: [Challenge]) async {
-        guard let topChallenge = activeChallenges.first else { return }
+        // `activeChallenges` comes from an unordered filter, so pick a stable "top"
+        // challenge: the one ending soonest (most urgent), tie-broken by id. Without
+        // this the widget could flip between challenges on successive syncs.
+        let topChallenge = activeChallenges.min { lhs, rhs in
+            if lhs.endDate != rhs.endDate { return lhs.endDate < rhs.endDate }
+            return lhs.id < rhs.id
+        }
+        guard let topChallenge else {
+            WidgetDataWriter.clear()
+            return
+        }
         let ck = await MainActor.run { CloudKitManager.shared }
         do {
             var participations = try await ck.fetchParticipations(challengeID: topChallenge.id)

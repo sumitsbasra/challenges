@@ -49,8 +49,8 @@ actor ActivityDataFetcher {
 
     // MARK: - Steps
 
-    /// Returns step count for the given calendar day.
-    func steps(on date: Date) async -> Double {
+    /// Returns step count for the given calendar day, or nil if the query errored.
+    func steps(on date: Date) async -> Double? {
         await querySum(
             type: HKQuantityType(.stepCount),
             unit: .count(),
@@ -60,8 +60,8 @@ actor ActivityDataFetcher {
 
     // MARK: - Distance
 
-    /// Returns walking + running distance (meters) for the given calendar day.
-    func distanceMeters(on date: Date) async -> Double {
+    /// Returns walking + running distance (meters) for the given calendar day, or nil on error.
+    func distanceMeters(on date: Date) async -> Double? {
         await querySum(
             type: HKQuantityType(.distanceWalkingRunning),
             unit: .meter(),
@@ -71,9 +71,9 @@ actor ActivityDataFetcher {
 
     // MARK: - Stand hours (Watch path)
 
-    /// Returns the number of stand-hours credited for the given calendar day.
+    /// Returns the number of stand-hours credited for the given calendar day, or nil on error.
     /// Counts HKCategoryType(.appleStandHour) samples where value == .stood.
-    func standHours(on date: Date) async -> Double {
+    func standHours(on date: Date) async -> Double? {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: date)
         let end   = calendar.date(byAdding: .day, value: 1, to: start) ?? Date(timeInterval: 86400, since: start)
@@ -85,7 +85,12 @@ actor ActivityDataFetcher {
                 predicate: predicate,
                 limit: HKObjectQueryNoLimit,
                 sortDescriptors: nil
-            ) { _, samples, _ in
+            ) { _, samples, error in
+                // Distinguish a real read failure (nil) from a genuine zero-stand day.
+                guard error == nil else {
+                    continuation.resume(returning: nil)
+                    return
+                }
                 let count = (samples as? [HKCategorySample])?
                     .filter { $0.value == HKCategoryValueAppleStandHour.stood.rawValue }
                     .count ?? 0
@@ -97,8 +102,8 @@ actor ActivityDataFetcher {
 
     // MARK: - Active energy (non-Watch path)
 
-    /// Returns active energy burned (kcal) for the given calendar day.
-    func activeEnergy(on date: Date) async -> Double {
+    /// Returns active energy burned (kcal) for the given calendar day, or nil on error.
+    func activeEnergy(on date: Date) async -> Double? {
         await querySum(
             type: HKQuantityType(.activeEnergyBurned),
             unit: .kilocalorie(),
@@ -108,7 +113,8 @@ actor ActivityDataFetcher {
 
     // MARK: - Exercise minutes (fallback)
 
-    func exerciseMinutes(on date: Date) async -> Double {
+    /// Returns exercise minutes for the given calendar day, or nil on error.
+    func exerciseMinutes(on date: Date) async -> Double? {
         await querySum(
             type: HKQuantityType(.appleExerciseTime),
             unit: .minute(),
@@ -118,7 +124,9 @@ actor ActivityDataFetcher {
 
     // MARK: - Private helpers
 
-    private func querySum(type: HKQuantityType, unit: HKUnit, on date: Date) async -> Double {
+    /// Returns the cumulative sum for `type`, or nil if HealthKit returned an error.
+    /// A nil result means "couldn't read" — callers must not persist it as a real zero.
+    private func querySum(type: HKQuantityType, unit: HKUnit, on date: Date) async -> Double? {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: date)
         let end   = calendar.date(byAdding: .day, value: 1, to: start) ?? Date(timeInterval: 86400, since: start)
@@ -127,7 +135,11 @@ actor ActivityDataFetcher {
         return await withCheckedContinuation { continuation in
             let query = HKStatisticsQuery(quantityType: type,
                                           quantitySamplePredicate: predicate,
-                                          options: .cumulativeSum) { _, stats, _ in
+                                          options: .cumulativeSum) { _, stats, error in
+                guard error == nil else {
+                    continuation.resume(returning: nil)
+                    return
+                }
                 let value = stats?.sumQuantity()?.doubleValue(for: unit) ?? 0
                 continuation.resume(returning: value)
             }

@@ -37,34 +37,7 @@ struct RankTimelineProvider: TimelineProvider {
         completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
     }
 
-    // MARK: Smart Stack Relevance
 
-    /// Surfaces the widget at 7am (morning check-in) and 7pm (post-workout).
-    /// iOS 17+ Smart Stack uses these hints to automatically rotate the widget
-    /// to the top of the stack at the specified times.
-    func relevances() async -> WidgetRelevances<Void> {
-        let morning = WidgetRelevance<Void>(
-            date: nextOccurrence(hour: 7, minute: 0),
-            duration: 3600,
-            configuration: ()
-        )
-        let evening = WidgetRelevance<Void>(
-            date: nextOccurrence(hour: 19, minute: 0),
-            duration: 3600,
-            configuration: ()
-        )
-        return WidgetRelevances([morning, evening])
-    }
-
-    private func nextOccurrence(hour: Int, minute: Int) -> Date {
-        var components = Calendar.current.dateComponents([.year, .month, .day], from: .now)
-        components.hour = hour
-        components.minute = minute
-        guard let candidate = Calendar.current.date(from: components) else { return .now }
-        return candidate > .now
-            ? candidate
-            : Calendar.current.date(byAdding: .day, value: 1, to: candidate) ?? candidate
-    }
 }
 
 // MARK: - Widget

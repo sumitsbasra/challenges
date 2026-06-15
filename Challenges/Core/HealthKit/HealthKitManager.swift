@@ -42,6 +42,23 @@ final class HealthKitManager: ObservableObject {
         ]
     }
 
+    /// Sample types we watch for background delivery. iOS wakes the app when any of
+    /// these gets new data (e.g. when the Watch syncs activity), letting us re-sync
+    /// scores without the user opening the app. Must be `HKSampleType`s — the activity
+    /// summary type can't back an `HKObserverQuery`, so we observe the underlying
+    /// quantity/category samples instead.
+    static var backgroundDeliveryTypes: [HKSampleType] {
+        [
+            HKQuantityType(.activeEnergyBurned),
+            HKQuantityType(.stepCount),
+            HKQuantityType(.appleExerciseTime),
+            HKQuantityType(.distanceWalkingRunning),
+            HKCategoryType(.appleStandHour),
+        ]
+    }
+
+    private var backgroundDeliveryStarted = false
+
     // MARK: - Authorization
 
     /// Requests all necessary HealthKit read permissions.
@@ -83,6 +100,48 @@ final class HealthKitManager: ObservableObject {
                 authorizationStatus = .unknown
             @unknown default:
                 authorizationStatus = .unknown
+            }
+        }
+    }
+
+    // MARK: - Background delivery
+
+    /// Registers an `HKObserverQuery` + background delivery for each scored sample type.
+    ///
+    /// When new activity data lands in HealthKit, iOS launches the app in the background
+    /// and fires the observer's update handler, which runs the normal sync. This keeps
+    /// scores reasonably fresh without the user opening the app. Background delivery for
+    /// cumulative quantities is throttled by iOS to roughly hourly — this complements,
+    /// rather than replaces, the foreground sync and the BGAppRefreshTask backstop.
+    ///
+    /// Safe to call more than once; observers are only registered on the first call.
+    func startBackgroundDelivery() {
+        guard HKHealthStore.isHealthDataAvailable(), !backgroundDeliveryStarted else { return }
+        backgroundDeliveryStarted = true
+
+        for type in Self.backgroundDeliveryTypes {
+            let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completionHandler, error in
+                // Always call completionHandler so HealthKit knows we're done and keeps
+                // delivering; skipping it can suspend future background launches.
+                guard error == nil else {
+                    completionHandler()
+                    return
+                }
+                Task {
+                    await SyncCoordinator.shared.syncCurrentChallenges()
+                    completionHandler()
+                }
+            }
+            store.execute(query)
+
+            store.enableBackgroundDelivery(for: type, frequency: .hourly) { success, error in
+                #if DEBUG
+                if let error {
+                    print("[HealthKitManager] enableBackgroundDelivery failed for \(type): \(error)")
+                } else {
+                    print("[HealthKitManager] background delivery enabled for \(type): \(success)")
+                }
+                #endif
             }
         }
     }

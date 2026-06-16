@@ -6,6 +6,7 @@ import CloudKit
 
 struct HomeView: View {
     @Environment(UserSession.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
     @State private var vm = HomeViewModel()
     @State private var navigationPath: [String] = []
     @State private var showProfile = false
@@ -48,6 +49,13 @@ struct HomeView: View {
                     ChallengeDetailView(challenge: challenge)
                 }
             }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // The activity card reads HealthKit once via `.task`, which doesn't re-run
+            // when the app returns from the background — so the rings/energy would go
+            // stale while the day's activity keeps accruing. Refresh on foreground.
+            guard newPhase == .active else { return }
+            Task { await vm.loadRings() }
         }
         .sheet(isPresented: $showProfile, onDismiss: {
             if let id = session.userID { profilePhoto = AvatarCache.load(userID: id) }
@@ -251,7 +259,7 @@ struct HomeView: View {
                     if vm.hasWatch {
                         ThreeRingView(ringData: vm.ringData, size: 132)
                     } else {
-                        TwoRingView(ringData: vm.ringData, size: 132)
+                        IPhoneRingView(ringData: vm.ringData, size: 132)
                     }
                 }
 
@@ -261,8 +269,9 @@ struct HomeView: View {
                         HomeMetricRow(label: "Exercise", current: vm.exerciseMinutes, goal: vm.exerciseGoal, unit: "min", color: .exerciseRing)
                         HomeMetricRow(label: "Stand",    current: vm.standHours,      goal: vm.standGoal,    unit: "hrs", color: .standRing)
                     } else {
-                        HomeMetricRow(label: "Steps",  current: vm.steps,        goal: vm.stepsGoal,  unit: "steps", color: .stepsColor)
-                        HomeMetricRow(label: "Energy", current: vm.activeEnergy, goal: vm.energyGoal, unit: "cal",   color: .activeEnergyColor)
+                        HomeMetricRow(label: "Steps",    current: vm.steps,           goal: vm.stepsGoal,    unit: "steps", color: .stepsColor)
+                        HomeMetricRow(label: "Exercise", current: vm.exerciseMinutes, goal: vm.exerciseGoal, unit: "min",   color: .exerciseRing)
+                        HomeMetricRow(label: "Energy",   current: vm.activeEnergy,    goal: vm.energyGoal,   unit: "cal",   color: .activeEnergyColor)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

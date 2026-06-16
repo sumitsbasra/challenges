@@ -264,7 +264,8 @@ struct HomeMetricRow: View {
                 .foregroundStyle(.secondary)
                 .tracking(0.5)
 
-            // Number line: "457/700 CAL" — all ring color, unit smaller
+            // Number line: "457/700 CAL" — all ring color, unit smaller.
+            // Keep it on one line and scale down to fit (e.g. "2,582/10,000 STEPS").
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text("\(Int(current).formatted())/\(Int(goal).formatted())")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
@@ -274,6 +275,8 @@ struct HomeMetricRow: View {
                     .foregroundStyle(color)
                     .tracking(0.3)
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
         }
     }
 }

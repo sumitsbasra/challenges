@@ -103,24 +103,29 @@ struct ThreeRingView: View {
     }
 }
 
-// MARK: - Two-Ring Stack (iPhone only)
+// MARK: - Three-Ring Stack (iPhone only)
 
-/// Concentric two-ring view for non-Apple Watch users (steps + active energy).
-struct TwoRingView: View {
+/// Concentric three-ring view for non-Apple Watch users.
+/// Order mirrors the scoring metrics: Steps (outer), Exercise (middle), Energy (inner).
+struct IPhoneRingView: View {
     let ringData: RingData
     let size: CGFloat
 
     var body: some View {
-        let lw  = size * 0.132
+        let lw  = size * 0.115   // matches ThreeRingView so both cards look consistent
         let gap = lw * 1.3
 
         ZStack {
             ActivityRingView(progress: ringData.stepsPct,
                              color: .stepsColor, lineWidth: lw)
 
+            ActivityRingView(progress: ringData.exerciseRingPct,
+                             color: .exerciseRing, lineWidth: lw)
+                .padding(gap)
+
             ActivityRingView(progress: ringData.activeEnergyPct,
                              color: .activeEnergyColor, lineWidth: lw)
-                .padding(gap)
+                .padding(gap * 2)
         }
         .frame(width: size, height: size)
     }
@@ -137,8 +142,8 @@ struct TwoRingView: View {
                 stepsPct: 0, activeEnergyPct: 0, syncSource: .watch
             ), size: 120)
 
-            TwoRingView(ringData: RingData(
-                moveRingPct: 0, exerciseRingPct: 0, standRingPct: 0,
+            IPhoneRingView(ringData: RingData(
+                moveRingPct: 0, exerciseRingPct: 0.9, standRingPct: 0,
                 stepsPct: 0.72, activeEnergyPct: 1.2, syncSource: .iphone
             ), size: 120)
         }

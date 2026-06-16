@@ -17,21 +17,21 @@ struct OnboardingView: View {
     @State private var ringsMerging             = false   // phase 1
     @State private var ringsCollapsed           = false   // phase 2
 
-    enum Step { case signIn, health, name, welcome }
+    enum Step { case signIn, health, name, notifications, welcome }
 
     // MARK: - Ring geometry (drives persistent layer)
 
     private var ringSize: CGFloat {
-        step == .health ? 80 : 136
+        (step == .health || step == .notifications) ? 80 : 136
     }
     private var ringLineWidth: CGFloat {
-        step == .health ? 10 : 14
+        (step == .health || step == .notifications) ? 10 : 14
     }
     /// Ring center expressed as a fraction of screen height
     private func ringCenterY(_ h: CGFloat) -> CGFloat {
         switch step {
-        case .health:  return h * 0.21
-        default:       return h * 0.34
+        case .health, .notifications:  return h * 0.21
+        default:                       return h * 0.34
         }
     }
 
@@ -69,6 +69,16 @@ struct OnboardingView: View {
                                 insertion: .opacity,
                                 removal: .move(edge: .leading).combined(with: .opacity)
                             ))
+
+                    case .notifications:
+                        NotificationsContent(
+                            ringBottomY: ringCenterY(geo.size.height) + ringSize / 2,
+                            onContinue: requestNotifications
+                        )
+                        .transition(.asymmetric(
+                            insertion: .opacity.animation(.easeIn.delay(0.2)),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
 
                     case .welcome:
                         WelcomeContent(
@@ -229,10 +239,7 @@ struct OnboardingView: View {
                         withTransaction(t) { ringsMerging = false; ringsCollapsed = false }
                     }
                 } else {
-                    // Reset rings to zero in the same frame the step changes so they
-                    // snap empty before the fill animations begin.
-                    startWelcomeRings()
-                    withAnimation(.easeInOut(duration: 0.45)) { step = .welcome }
+                    goToNotifications()
                 }
             }
         }
@@ -255,12 +262,23 @@ struct OnboardingView: View {
                 try? await CloudKitManager.shared.saveUser(user, avatarData: jpegData)
             }
         }
-        withAnimation(.easeInOut(duration: 0.45)) { step = .welcome }
-        startWelcomeRings()
+        goToNotifications()
     }
 
-    private func startWelcomeRings() {
-        // Ask for notification permission now that the user has completed onboarding setup.
+    /// Advances to the notifications explainer, ensuring the rings read as complete
+    /// behind it (the name step may have left them merged/collapsed).
+    private func goToNotifications() {
+        var t = Transaction(); t.disablesAnimations = true
+        withTransaction(t) { ringsMerging = false; ringsCollapsed = false }
+        withAnimation(.spring(response: 1.0, dampingFraction: 0.8)) {
+            moveProgress = 1; exerciseProgress = 1; standProgress = 1
+        }
+        withAnimation(.easeInOut(duration: 0.4)) { step = .notifications }
+    }
+
+    /// Triggers the system notification prompt, then advances to the welcome screen
+    /// once the user has responded (allow or deny).
+    private func requestNotifications() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             #if DEBUG
             if let error = error {
@@ -269,7 +287,14 @@ struct OnboardingView: View {
                 print("[Onboarding] Notification authorization granted: \(granted)")
             }
             #endif
+            DispatchQueue.main.async {
+                startWelcomeRings()
+                withAnimation(.easeInOut(duration: 0.45)) { step = .welcome }
+            }
         }
+    }
+
+    private func startWelcomeRings() {
         // Snap to zero without any animation (suppresses implicit spring on the overlay)
         var t = Transaction()
         t.disablesAnimations = true
@@ -446,6 +471,65 @@ private struct HealthDataRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+}
+
+// MARK: - Screen 2.75 content (Notifications — no rings)
+
+private struct NotificationsContent: View {
+    let ringBottomY: CGFloat
+    let onContinue: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 0) {
+                // Reserve space for rings
+                Spacer().frame(height: ringBottomY + 20)
+
+                Text("Stay in the Game")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(.white)
+                    .padding(.bottom, 10)
+
+                Text("Get a heads-up when a challenge starts, on the final day, and when results are in — plus a daily nudge to close your rings.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color(white: 0.55))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 36)
+                    .padding(.bottom, 28)
+
+                VStack(spacing: 0) {
+                    HealthDataRow(icon: "flag.checkered", color: .exerciseRing, title: "Challenge Updates", detail: "Start, final day, and final standings")
+                    Divider().padding(.horizontal, 16)
+                    HealthDataRow(icon: "bell.badge.fill", color: .moveRing,    title: "Daily Reminders",  detail: "A nudge to keep your streak alive")
+                }
+                .background(Color.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .padding(.horizontal, 16)
+
+                Text("You can change these any time in Settings.")
+                    .font(.caption2)
+                    .foregroundStyle(Color(white: 0.38))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 10)
+                    .padding(.horizontal, 32)
+
+                Spacer()
+
+                Button(action: onContinue) {
+                    Text("Allow Notifications")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 17)
+                        .background(Color.moveRing)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 52)
+            }
+        }
     }
 }
 

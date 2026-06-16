@@ -143,18 +143,24 @@ final class HomeViewModel {
                 )
             }
         } else {
-            async let stepsTask  = fetcher.steps(on: today)
-            async let energyTask = fetcher.activeEnergy(on: today)
-            let (s, e) = await (stepsTask ?? 0, energyTask ?? 0)
-            steps        = s
-            activeEnergy = e
+            async let stepsTask    = fetcher.steps(on: today)
+            async let energyTask   = fetcher.activeEnergy(on: today)
+            async let exerciseTask = fetcher.exerciseMinutes(on: today)
+            let (s, e, ex) = await (stepsTask ?? 0, energyTask ?? 0, exerciseTask ?? 0)
+            steps           = s
+            activeEnergy    = e
+            exerciseMinutes = ex
             let goalResolver  = GoalResolver()
             let stepsGoalVal  = goalResolver.stepsGoal
             let energyGoalVal = goalResolver.activeEnergyGoal
-            self.stepsGoal  = stepsGoalVal
-            self.energyGoal = energyGoalVal
+            let exerciseGoalVal = GoalResolver.defaultExerciseGoalMinutes
+            self.stepsGoal    = stepsGoalVal
+            self.energyGoal   = energyGoalVal
+            self.exerciseGoal = exerciseGoalVal
             ringData = RingData(
-                moveRingPct: 0, exerciseRingPct: 0, standRingPct: 0,
+                moveRingPct: 0,
+                exerciseRingPct: exerciseGoalVal > 0 ? ex / exerciseGoalVal : 0,
+                standRingPct: 0,
                 stepsPct:        stepsGoalVal  > 0 ? s / stepsGoalVal  : 0,
                 activeEnergyPct: energyGoalVal > 0 ? e / energyGoalVal : 0,
                 syncSource: .iphone

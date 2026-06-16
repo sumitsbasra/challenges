@@ -48,8 +48,8 @@ Each contribution is capped at 2× so exceeding a goal still rewards effort. Max
 - **Siri & Shortcuts** — "What's my rank in [challenge]?" returns a spoken result without opening the app; works with Apple Intelligence natural language on iOS 18.1+
 - **Spotlight search** — challenges indexed in Core Spotlight; tap a result to jump straight to the detail view
 - **Home Screen widget** — shows current rank, points, days remaining, and participant count; Smart Stack relevance hints surface it at 7am and 7pm
-- **Local notifications** — day-before reminder, first-day and last-day nudges, and final standings alert; per-type toggles in Profile; respects iOS notification permission state
-- **Background sync** — HealthKit → CloudKit sync every 15 minutes via `BGAppRefreshTask`; also triggered by the widget timeline reload
+- **Local notifications** — day-before reminder (5 PM), first-day and last-day nudges, a daily progress reminder, and a final-standings alert the morning after the challenge ends; copy rotates to stay fresh; per-type toggles in Profile; respects iOS notification permission state
+- **Background sync** — HealthKit background delivery (observer queries) wakes the app to sync scores when new activity data arrives, even when the app is closed; backed up by a `BGAppRefreshTask` every 15 minutes and the widget timeline reload
 
 ## Project structure
 
@@ -68,7 +68,7 @@ Challenges/
 ├── Features/
 │   ├── Challenges/      New challenge + join views and view models
 │   ├── Detail/          ChallengeDetailView, leaderboard, MyProgressView, DailyBreakdownView, ScoreHistoryChart
-│   ├── Home/            HomeView + HomeViewModel (rings card, challenge cards, empty state)
+│   ├── Home/            HomeView, HomeViewModel, HomeChallengeRows (rings card, challenge cards, empty state)
 │   ├── Onboarding/      Sign in, HealthKit explanation, name/photo entry
 │   ├── Profile/         Data source, health permissions, notification settings, units
 │   └── Today/           TodayItem model
@@ -78,7 +78,9 @@ Challenges/
     ├── Components/      Reusable views (ThreeRingView, EmptyStateView, etc.)
     └── Styles/          Colors, typography, card backgrounds
 
-ChallengesWidget/        WidgetKit extension — rank, points, days remaining (systemSmall + systemMedium)
+challenges widget/       WidgetKit extension (target: challenges widgetExtension) — rank, points, days remaining (systemSmall + systemMedium)
+
+ChallengesTests/         Unit tests — PointsCalculator, ScoreAggregator, challenge countdown formatting
 ```
 
 ## Data flow
@@ -93,7 +95,7 @@ HealthKit → SyncCoordinator → CloudKit (DailyScore records)
            SwiftUI views + Widget (via App Group UserDefaults)
 ```
 
-Sync runs on open (detail view), on home screen load, and every 15 minutes in the background. The sync result is injected directly into the UI rather than re-fetching from CloudKit, which avoids the read-after-write consistency window inherent in the public CloudKit database.
+Sync runs on open (detail view), on home screen load, on HealthKit background delivery (new activity data while the app is closed), and every 15 minutes via background app refresh. The sync result is injected directly into the UI rather than re-fetching from CloudKit, which avoids the read-after-write consistency window inherent in the public CloudKit database.
 
 ## Apple Intelligence integration
 
@@ -111,8 +113,8 @@ On iOS 18.1+ with Apple Intelligence enabled, Siri understands natural language 
 ## Xcode setup
 
 1. Open `Challenges.xcodeproj`
-2. Set your development team in both the `Challenges` and `ChallengesWidget` targets
-3. Enable capabilities: **HealthKit**, **CloudKit**, **Push Notifications**, **Background Modes** (fetch, processing, remote-notification), **Sign in with Apple**, **App Groups**
+2. Set your development team in both the `Challenges` and `challenges widgetExtension` targets
+3. Enable capabilities: **HealthKit** (including **Background Delivery**), **CloudKit**, **Push Notifications**, **Background Modes** (fetch, processing, remote-notification), **Sign in with Apple**, **App Groups**
 4. Register App Group `group.studio.ssb.challenges` in the Apple Developer portal for both App IDs (required for the widget to read data written by the main app)
 
 ## CloudKit indexes
@@ -124,6 +126,8 @@ Set these in the CloudKit Dashboard (required for queries to work):
 | `Challenge` | `inviteCode`, `status`, `startDate`, `creatorRef` |
 | `Participation` | `challengeRef`, `userRef`, `status` |
 | `DailyScore` | `challengeRef`, `participationRef`, `date` |
+
+> **Deploy the schema to Production before distributing.** CloudKit's Development (Xcode runs) and Production (TestFlight/App Store) environments have separate schemas and data. New fields and indexes — e.g. the `Users.avatarAsset` field — must be pushed via **CloudKit Dashboard → Deploy Schema Changes**, or that data silently fails to persist for TestFlight/App Store users.
 
 ## Requirements
 

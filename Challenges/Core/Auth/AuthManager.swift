@@ -129,7 +129,9 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
                 id: ckRecordName,
                 displayName: displayName,
                 appleUserID: appleUserID,
-                hasAppleWatch: false,
+                // Restore the known watch state so it isn't wrongly false until
+                // onboarding re-detects; onboarding still re-detects and re-saves.
+                hasAppleWatch: existingUser?.hasAppleWatch ?? false,
                 avatarURL: existingUser?.avatarURL ?? AvatarCache.localURL(for: ckRecordName)
             )
             pendingUser = user

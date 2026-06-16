@@ -144,7 +144,9 @@ final class ChallengeDetailViewModel {
               !participations.contains(where: { $0.user.id == userID }) else { return }
 
         let participation = Participation(
-            id: UUID().uuidString,
+            // Deterministic id so recreating is an upsert, never a duplicate — even if
+            // this runs more than once (e.g. two near-simultaneous opens).
+            id: "\(challenge.id)_\(creator.id)",
             challengeID: challenge.id,
             user: creator,
             // joinedAt ≤ startDate so the creator is scored for the full challenge window.

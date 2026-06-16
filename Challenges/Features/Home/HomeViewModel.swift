@@ -210,6 +210,18 @@ final class HomeViewModel {
             Task.detached { AvatarCache.pruneStale(keepingUserIDs: seenIDs) }
             SpotlightIndexer.index(all)
             Task { await NotificationScheduler.reschedule(for: all) }
+            // Backfill scores for recently-completed challenges (ended within the last
+            // 2 days) so final standings populate without opening each one. syncChallenge
+            // no-ops on days that already have points, so this is cheap on repeat loads.
+            let twoDaysAgo = Calendar.current.date(byAdding: .day, value: -2, to: Date()) ?? Date()
+            let recentlyCompleted = all.filter { $0.status == .completed && $0.endDate > twoDaysAgo }
+            if !recentlyCompleted.isEmpty {
+                Task.detached {
+                    for challenge in recentlyCompleted {
+                        _ = await SyncCoordinator.shared.syncChallenge(challenge)
+                    }
+                }
+            }
         } catch {
             let ckError = error as? CKError
             if ckError?.code == .networkUnavailable || ckError?.code == .networkFailure {

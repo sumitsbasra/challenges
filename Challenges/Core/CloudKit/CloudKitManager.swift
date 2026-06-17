@@ -362,6 +362,38 @@ final class CloudKitManager: ObservableObject {
         return try await fetchAllRecords(matching: query).compactMap(RecordMapper.dailyScore)
     }
 
+    // MARK: - Retry Helper
+
+    /// Runs a CloudKit operation with bounded retry on transient errors so a single
+    /// hiccup (rate limiting, a busy zone, a brief service/network blip) doesn't surface
+    /// as a "Couldn't load" banner. Honors the server's `retryAfterSeconds` hint.
+    private func withRetry<T>(maxAttempts: Int = 3, _ operation: () async throws -> T) async throws -> T {
+        let retryable: Set<CKError.Code> = [
+            .networkUnavailable, .networkFailure, .serviceUnavailable,
+            .requestRateLimited, .zoneBusy, .serverResponseLost,
+        ]
+        var attempt = 1
+        while true {
+            do {
+                return try await operation()
+            } catch {
+                let ckError = error as? CKError
+                guard let code = ckError?.code, retryable.contains(code), attempt < maxAttempts else {
+                    #if DEBUG
+                    print("[CloudKitManager] read failed (attempt \(attempt)): \((error as? CKError)?.code.rawValue as Any) \(error.localizedDescription)")
+                    #endif
+                    throw error
+                }
+                let delay = ckError?.retryAfterSeconds ?? Double(attempt)  // linear backoff fallback
+                #if DEBUG
+                print("[CloudKitManager] retryable error \(code) — retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
+                #endif
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                attempt += 1
+            }
+        }
+    }
+
     // MARK: - Pagination Helper
 
     /// Fetches every record matching `query`, following CloudKit cursors until exhausted.
@@ -372,12 +404,12 @@ final class CloudKitManager: ObservableObject {
     private func fetchAllRecords(matching query: CKQuery) async throws -> [CKRecord] {
         var records: [CKRecord] = []
 
-        let (initial, initialCursor) = try await publicDB.records(matching: query)
+        let (initial, initialCursor) = try await withRetry { try await self.publicDB.records(matching: query) }
         records += initial.compactMap { try? $1.get() }
 
         var cursor = initialCursor
         while let activeCursor = cursor {
-            let (more, nextCursor) = try await publicDB.records(continuingMatchFrom: activeCursor)
+            let (more, nextCursor) = try await withRetry { try await self.publicDB.records(continuingMatchFrom: activeCursor) }
             records += more.compactMap { try? $1.get() }
             cursor = nextCursor
         }

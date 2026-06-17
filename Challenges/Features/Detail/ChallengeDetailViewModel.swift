@@ -215,6 +215,9 @@ final class ChallengeDetailViewModel {
             ParticipationCache.save(participations, challengeID: challenge.id)
         } catch {
             let ck = error as? CKError
+            #if DEBUG
+            print("[ChallengeDetail] fetchAndUpdate failed: code=\(ck?.code.rawValue as Any) \(error.localizedDescription)")
+            #endif
             if ck?.code == .networkUnavailable || ck?.code == .networkFailure {
                 if participations.isEmpty { self.error = "No internet connection." }
             } else {
@@ -378,6 +381,9 @@ final class ChallengeDetailViewModel {
             ParticipationCache.save(participations, challengeID: challenge.id)
         } catch {
             // Non-fatal — partial data is better than nothing; user can pull-to-refresh.
+            #if DEBUG
+            print("[ChallengeDetail] loadLeaderboard failed: code=\((error as? CKError)?.code.rawValue as Any) \(error.localizedDescription)")
+            #endif
             self.error = "Couldn't load leaderboard. Pull down to try again."
         }
     }

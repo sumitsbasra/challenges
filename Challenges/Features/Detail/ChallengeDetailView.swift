@@ -575,7 +575,7 @@ private struct ScoreHistoryChart: View {
                     if let date = value.as(Date.self) {
                         // "M/d" → "3/24", "3/25", etc.
                         let label = date.formatted(.dateTime.day())
-                        AxisValueLabel(label, centered: true)
+                        AxisValueLabel(label)
                             .font(.system(size: 10))
                             .foregroundStyle(Color.secondary)
                     }

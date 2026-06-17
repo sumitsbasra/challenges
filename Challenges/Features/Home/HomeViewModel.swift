@@ -230,6 +230,9 @@ final class HomeViewModel {
             }
         } catch {
             let ckError = error as? CKError
+            #if DEBUG
+            print("[HomeViewModel] loadChallenges failed: code=\(ckError?.code.rawValue as Any) \(error.localizedDescription)")
+            #endif
             if ckError?.code == .networkUnavailable || ckError?.code == .networkFailure {
                 self.error = "No internet connection. Showing cached data."
             } else if ckError?.code == .notAuthenticated {

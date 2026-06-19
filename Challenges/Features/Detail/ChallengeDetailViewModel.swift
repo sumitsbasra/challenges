@@ -372,6 +372,8 @@ final class ChallengeDetailViewModel {
             }
             leaderboardLoaded = true
             lastFetchDate = Date()
+            // Clear any stale error banner now that the leaderboard loaded.
+            self.error = nil
 
             // Re-apply the live HealthKit overlay to ensure today's rings are correct,
             // then persist so the cache has real ring values for the next open.

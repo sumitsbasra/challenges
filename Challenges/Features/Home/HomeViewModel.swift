@@ -207,6 +207,8 @@ final class HomeViewModel {
                 .union(activeResult.participantIDs)
                 .union(completedResult.participantIDs)
             applyAll(all, activeItems: active, completedItems: completed)
+            // Clear any stale error banner now that a load has succeeded.
+            self.error = nil
             // Immediately patch today's points from the in-memory ring data so every
             // reload trigger (navigation pop, CloudKit push, participation change) shows
             // live activity values without waiting for another HealthKit sync.

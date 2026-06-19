@@ -37,6 +37,30 @@ final class ChallengeDetailViewModel {
         return rankedParticipations.first { $0.user.id == userID }
     }
 
+    /// The current user's standing: rank, field size, and point gaps. Nil if the user
+    /// isn't a participant or there are no participants yet.
+    struct Standing {
+        let rank: Int
+        let total: Int
+        let pointsBehindLeader: Double  // 0 when the user is 1st
+        let pointsToNextRank: Double    // 0 when the user is 1st
+    }
+
+    var standing: Standing? {
+        let ranked = rankedParticipations
+        guard let userID = UserSession.shared.userID,
+              let myIdx = ranked.firstIndex(where: { $0.user.id == userID }) else { return nil }
+        let me = ranked[myIdx]
+        let leaderPoints = ranked.first?.totalPoints ?? me.totalPoints
+        let toNext = myIdx > 0 ? ranked[myIdx - 1].totalPoints - me.totalPoints : 0
+        return Standing(
+            rank: me.rank,
+            total: ranked.count,
+            pointsBehindLeader: max(0, leaderPoints - me.totalPoints),
+            pointsToNextRank: max(0, toNext)
+        )
+    }
+
     var daysRemaining: Int {
         let now = Date()
         guard challenge.status == .active else { return 0 }

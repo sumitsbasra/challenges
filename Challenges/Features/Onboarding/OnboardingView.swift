@@ -201,11 +201,11 @@ struct OnboardingView: View {
 
     private func handleSignIn(name: String) {
         welcomeName = name
-        // Rings animate to health-screen values as step changes
+        // Health step: rings partially full — they fill further across the next steps.
         withAnimation(.spring(response: 0.6, dampingFraction: 0.78)) {
-            moveProgress     = 0.85
-            exerciseProgress = 1.0
-            standProgress    = 0.70
+            moveProgress     = 0.42
+            exerciseProgress = 0.50
+            standProgress    = 0.34
             step             = .health
         }
     }
@@ -270,8 +270,10 @@ struct OnboardingView: View {
     private func goToNotifications() {
         var t = Transaction(); t.disablesAnimations = true
         withTransaction(t) { ringsMerging = false; ringsCollapsed = false }
+        // Notifications step: rings fill further than the health step (but not all the
+        // way — they complete on the welcome screen).
         withAnimation(.spring(response: 1.0, dampingFraction: 0.8)) {
-            moveProgress = 1; exerciseProgress = 1; standProgress = 1
+            moveProgress = 0.72; exerciseProgress = 0.80; standProgress = 0.64
         }
         withAnimation(.easeInOut(duration: 0.4)) { step = .notifications }
     }

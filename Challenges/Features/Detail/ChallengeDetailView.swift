@@ -10,6 +10,7 @@ struct ChallengeDetailView: View {
     @State private var showDeleteConfirm  = false
     @State private var showLeaveConfirm   = false
     @State private var showEditChallenge  = false
+    @State private var selectedParticipant: Participation?
 
     /// Always reads from the ViewModel so live status transitions (pending → active, etc.)
     /// are immediately reflected in the UI without re-navigating.
@@ -26,17 +27,28 @@ struct ChallengeDetailView: View {
                 statusBanner
                     .padding(.top, 8)
 
-                // 2. Activity hero card (current user's rings)
+                // 2. Standing summary (active) / results moment (completed)
+                if challenge.status == .active, let s = vm.standing {
+                    standingSummary(s)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                } else if challenge.status == .completed, let s = vm.standing {
+                    resultsHeader(s)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                }
+
+                // 3. Activity hero card (current user's rings)
                 if let me = vm.currentUserParticipation, challenge.status == .active {
                     MyProgressView(participation: me)
                         .padding(.horizontal, 16)
-                        .padding(.top, 24)
+                        .padding(.top, 20)
                     PointsCardView(participation: me)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                 }
 
-                // 3. Score history chart — active and completed challenges with data
+                // 4. Score history chart — active and completed challenges with data
                 if challenge.status != .pending,
                    let me = vm.currentUserParticipation,
                    !me.dailyScores.isEmpty {
@@ -45,13 +57,18 @@ struct ChallengeDetailView: View {
                         .padding(.top, 20)
                 }
 
-                // 4. Leaderboard — all statuses (pending shows who's joined, active/completed shows ranks)
+                // 5. Pending: lead with the invite so people get in before it starts.
+                if challenge.status == .pending {
+                    inviteSection
+                        .padding(.top, 24)
+                }
+
+                // 6. Leaderboard — all statuses (pending shows who's joined, active/completed shows ranks)
                 leaderboardSection
                     .padding(.top, 28)
 
-                // 5. Invite code — creator only, pending or active challenges
-                if challenge.status != .completed,
-                   challenge.creatorID == (session.userID ?? "") {
+                // 7. Active: invite below the leaderboard. Any participant can share.
+                if challenge.status == .active {
                     inviteSection
                         .padding(.top, 28)
                 }
@@ -146,6 +163,13 @@ struct ChallengeDetailView: View {
                 }
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .sheet(item: $selectedParticipant) { p in
+            ParticipantDetailSheet(
+                participation: p,
+                challenge: challenge,
+                isCurrentUser: p.user.id == session.userID
+            )
         }
         .sheet(isPresented: $showEditChallenge) {
             EditChallengeSheet(challenge: vm.challenge) { title, start, end in
@@ -251,11 +275,19 @@ struct ChallengeDetailView: View {
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(vm.rankedParticipations.enumerated()), id: \.element.id) { idx, p in
-                            LeaderboardRowView(
+                            let row = LeaderboardRowView(
                                 participation: p,
                                 isCurrentUser: p.user.id == session.userID,
                                 showRank: challenge.status != .pending
                             )
+                            // Tap a participant to see their score breakdown — only once
+                            // there are scores to show (active/completed, not pending).
+                            if challenge.status != .pending {
+                                Button { selectedParticipant = p } label: { row }
+                                    .buttonStyle(.plain)
+                            } else {
+                                row
+                            }
                             if idx < vm.rankedParticipations.count - 1 {
                                 Divider().padding(.horizontal, 16)
                             }
@@ -266,6 +298,80 @@ struct ChallengeDetailView: View {
             }
             .padding(.horizontal, 16)
         }
+    }
+
+    // MARK: - Standing summary (active)
+
+    @ViewBuilder
+    private func standingSummary(_ s: ChallengeDetailViewModel.Standing) -> some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Your standing")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .tracking(0.5)
+                Text("\(ordinal(s.rank)) of \(s.total)")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                if s.rank == 1 {
+                    Text("In the lead 🏆")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.rankGold)
+                } else {
+                    Text("\(Int(s.pointsToNextRank).formatted()) pts to #\(s.rank - 1)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.moveRing)
+                    Text("\(Int(s.pointsBehindLeader).formatted()) behind 1st")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    // MARK: - Results header (completed)
+
+    @ViewBuilder
+    private func resultsHeader(_ s: ChallengeDetailViewModel.Standing) -> some View {
+        VStack(spacing: 10) {
+            if let winner = vm.rankedParticipations.first {
+                Text("🏆")
+                    .font(.system(size: 34))
+                Text("\(winner.user.id == session.userID ? "You" : winner.user.displayName) won")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+            }
+            Text("You finished \(ordinal(s.rank)) of \(s.total) \(medal(s.rank))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(colors: [Color.rankGold.opacity(0.14), Color.cardBackground],
+                           startPoint: .top, endPoint: .bottom)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    /// 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th", etc.
+    private func ordinal(_ n: Int) -> String {
+        let ones = n % 10, tens = (n / 10) % 10
+        let suffix: String
+        if tens == 1 { suffix = "th" }
+        else { switch ones { case 1: suffix = "st"; case 2: suffix = "nd"; case 3: suffix = "rd"; default: suffix = "th" } }
+        return "\(n)\(suffix)"
+    }
+
+    private func medal(_ rank: Int) -> String {
+        switch rank { case 1: return "🥇"; case 2: return "🥈"; case 3: return "🥉"; default: return "" }
     }
 
     // MARK: - Invite
@@ -298,6 +404,65 @@ struct ChallengeDetailView: View {
             if text == "Ends today" || text == "Ends tomorrow" { return .moveRing }
             return .exerciseRing
         }
+    }
+}
+
+// MARK: - Participant Detail Sheet
+
+/// Tapping a leaderboard row opens this — a participant's rank, total, score history,
+/// and daily breakdown. Reuses the same chart/breakdown components as the hero card.
+private struct ParticipantDetailSheet: View {
+    let participation: Participation
+    let challenge: Challenge
+    let isCurrentUser: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    private var name: String { isCurrentUser ? "You" : participation.user.displayName }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(name).font(.title2.bold())
+                            Text("Rank #\(participation.rank)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 0) {
+                            Text(Int(participation.totalPoints).formatted())
+                                .font(.system(size: 30, weight: .bold, design: .rounded))
+                                .foregroundStyle(Color.moveRing)
+                            Text("points").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.top, 8)
+
+                    if participation.dailyScores.isEmpty {
+                        Text("No activity yet.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 48)
+                    } else {
+                        ScoreHistoryChart(participation: participation, challenge: challenge)
+                        DailyBreakdownView(participation: participation, challengeStartDate: challenge.startDate)
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color.appBackground.ignoresSafeArea())
+            .navigationTitle(name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 

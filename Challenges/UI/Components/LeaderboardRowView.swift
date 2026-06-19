@@ -26,7 +26,7 @@ struct LeaderboardRowView: View {
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 16)
-        .background(Color.clear)
+        .background(isCurrentUser ? Color.moveRing.opacity(0.10) : Color.clear)
     }
 
     // MARK: - Rank

@@ -4,8 +4,12 @@ import Foundation
 /// All inputs are plain doubles so this is easy to unit test.
 enum PointsCalculator {
 
+    /// Hard daily cap, matching Apple's Activity Competitions (max 600 points/day).
     static let maxPointsPerDay: Double = 600
-    static let maxContributionMultiplier: Double = 2.0  // 200% = max
+    /// Upper bound used only when clamping ring *fractions* for display, so a single
+    /// over-achieved ring doesn't render absurdly. It does not limit scoring — points
+    /// use the raw percentages and are capped by `maxPointsPerDay`.
+    static let maxContributionMultiplier: Double = 2.0
 
     // MARK: - Watch path (3 rings)
 
@@ -24,17 +28,19 @@ enum PointsCalculator {
         exerciseMinutes: Double, exerciseGoal: Double = 30,
         standHours: Double, standGoal: Double = 12
     ) -> (points: Double, ringData: RingData) {
-        let movePct  = clamp(moveCalories  / max(moveGoal, 1),     0, maxContributionMultiplier)
-        let exPct    = clamp(exerciseMinutes / max(exerciseGoal, 1), 0, maxContributionMultiplier)
-        let standPct = clamp(standHours    / max(standGoal, 1),    0, maxContributionMultiplier)
+        // Apple Activity Competition scoring: points = the sum of each ring's
+        // percentage, capped at 600/day. All three rings at 100% = 300 points; you
+        // can earn more by exceeding goals, up to the 600 daily cap.
+        let moveFrac  = moveCalories    / max(moveGoal, 1)
+        let exFrac    = exerciseMinutes / max(exerciseGoal, 1)
+        let standFrac = standHours      / max(standGoal, 1)
 
-        let rawScore = (movePct + exPct + standPct) / 3.0
-        let points = rawScore * maxPointsPerDay
+        let points = min(maxPointsPerDay, max(0, moveFrac + exFrac + standFrac) * 100)
 
         let ringData = RingData(
-            moveRingPct: movePct,
-            exerciseRingPct: exPct,
-            standRingPct: standPct,
+            moveRingPct: clamp(moveFrac, 0, maxContributionMultiplier),
+            exerciseRingPct: clamp(exFrac, 0, maxContributionMultiplier),
+            standRingPct: clamp(standFrac, 0, maxContributionMultiplier),
             stepsPct: 0,
             activeEnergyPct: 0,
             syncSource: .watch,
@@ -63,12 +69,16 @@ enum PointsCalculator {
         activeEnergy: Double, activeEnergyGoal: Double = 500,
         exerciseMinutes: Double, exerciseGoal: Double = 30
     ) -> (points: Double, ringData: RingData) {
-        let stepsPct    = clamp(steps           / max(stepsGoal, 1),        0, maxContributionMultiplier)
-        let energyPct   = clamp(activeEnergy    / max(activeEnergyGoal, 1), 0, maxContributionMultiplier)
-        let exercisePct = clamp(exerciseMinutes / max(exerciseGoal, 1),     0, maxContributionMultiplier)
+        // Same Apple-style scoring as the Watch path: sum of percentages, capped at 600.
+        let stepsFrac    = steps           / max(stepsGoal, 1)
+        let energyFrac   = activeEnergy    / max(activeEnergyGoal, 1)
+        let exerciseFrac = exerciseMinutes / max(exerciseGoal, 1)
 
-        let rawScore = (stepsPct + energyPct + exercisePct) / 3.0
-        let points = rawScore * maxPointsPerDay
+        let points = min(maxPointsPerDay, max(0, stepsFrac + energyFrac + exerciseFrac) * 100)
+
+        let stepsPct    = clamp(stepsFrac,    0, maxContributionMultiplier)
+        let energyPct   = clamp(energyFrac,   0, maxContributionMultiplier)
+        let exercisePct = clamp(exerciseFrac, 0, maxContributionMultiplier)
 
         let ringData = RingData(
             moveRingPct:     stepsPct,    // outer  ring = steps     (red)

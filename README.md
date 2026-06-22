@@ -19,17 +19,19 @@ Apple's built-in Fitness competitions only support head-to-head matchups. Challe
 
 ## Points system
 
+Mirrors Apple's Activity Competitions: points are the **sum of your ring percentages**, capped at **600 points/day**. All three rings at 100% = 300 points; you earn more by exceeding goals, up to the daily cap.
+
 **Apple Watch (3 rings)**
 ```
-pts = ((move/moveGoal + exercise/30min + stand/12hr) / 3) × 600
+pts = min(600, (move/moveGoal + exercise/30min + stand/12hr) × 100)
 ```
 
 **iPhone only (3 metrics)**
 ```
-pts = ((steps/10000 + exercise/30min + activeEnergy/500kcal) / 3) × 600
+pts = min(600, (steps/10000 + exercise/30min + activeEnergy/500kcal) × 100)
 ```
 
-Each contribution is capped at 2× so exceeding a goal still rewards effort. Max is 1200 pts/day (all three metrics at 200%). Scoring mode is determined at join time by the Watch detected on-device and never changes mid-competition.
+A single over-achieved ring can reach the cap on its own, just like Apple. Scoring mode is determined at join time by the Watch detected on-device and never changes mid-competition.
 
 ## Features
 

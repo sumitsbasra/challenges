@@ -525,7 +525,7 @@ private struct ParticipantDetailSheet: View {
                     } else {
                         statsGrid
                         ScoreHistoryChart(participation: participation, challenge: challenge,
-                                          title: isCurrentUser ? "My Points" : "Points")
+                                          title: isCurrentUser ? "My Points" : "\(participation.user.displayName)'s Points")
                         DailyBreakdownView(participation: participation, challenge: challenge)
                     }
 
@@ -649,9 +649,9 @@ private struct WorkoutRow: View {
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(workout.durationText)
+                Text(detail)
                     .font(.subheadline.weight(.semibold)).monospacedDigit()
-                Text(detail).font(.caption).foregroundStyle(.secondary)
+                Text(workout.durationText).font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 16)
@@ -926,8 +926,19 @@ private struct ScoreHistoryChart: View {
         return nextDay.addingTimeInterval(43_200) // +12 hours
     }
 
+    /// Top of the Y axis: round the day's best score up to the next 500 (min 500) so the
+    /// line fills the vertical space instead of floating against a fixed 2000 ceiling.
+    private var yMax: Double {
+        let best = scores.map(\.points).max() ?? 0
+        return max(500, (best / 500).rounded(.up) * 500)
+    }
+
+    private var yAxisValues: [Double] {
+        Array(stride(from: 0, through: yMax, by: 500))
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             FitnessSectionHeader(title: title)
 
             Chart(scores, id: \.id) { score in
@@ -970,7 +981,7 @@ private struct ScoreHistoryChart: View {
                 }
             }
             .chartYAxis {
-                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                AxisMarks(position: .leading, values: yAxisValues) { value in
                     AxisValueLabel()
                         .font(.system(size: 10))
                         .foregroundStyle(Color.secondary)
@@ -978,9 +989,12 @@ private struct ScoreHistoryChart: View {
                 }
             }
             .chartXScale(domain: chartStartDate...chartEndDate)
+            .chartYScale(domain: 0...yMax)
             .frame(height: 100)
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
         .background(Color.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }

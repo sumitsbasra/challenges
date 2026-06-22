@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import CloudKit
 import HealthKit
+import OSLog
 
 @MainActor
 @Observable
@@ -241,9 +242,7 @@ final class ChallengeDetailViewModel {
             ParticipationCache.save(participations, challengeID: challenge.id)
         } catch {
             let ck = error as? CKError
-            #if DEBUG
-            print("[ChallengeDetail] fetchAndUpdate failed: code=\(ck?.code.rawValue as Any) \(error.localizedDescription)")
-            #endif
+            Logger.cloudKit.error("fetchAndUpdate failed: code=\(ck?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
             // Only surface a banner when there's nothing to show. If cached/already-
             // loaded participations are on screen, a failed refresh stays silent and
             // retries on the next trigger.
@@ -419,9 +418,7 @@ final class ChallengeDetailViewModel {
             // an error when there's genuinely nothing to show; if the leaderboard already
             // has participants/points (from the participation fetch or cache), stay quiet
             // and let the next refresh/push retry silently.
-            #if DEBUG
-            print("[ChallengeDetail] loadLeaderboard failed: code=\((error as? CKError)?.code.rawValue as Any) \(error.localizedDescription)")
-            #endif
+            Logger.cloudKit.error("loadLeaderboard failed: code=\((error as? CKError)?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
             if rankedParticipations.isEmpty {
                 self.error = "Couldn't load leaderboard. Pull down to try again."
             }

@@ -1,6 +1,7 @@
 import SwiftUI
 import HealthKit
 import CloudKit
+import OSLog
 
 // MARK: - ViewModel
 
@@ -232,9 +233,7 @@ final class HomeViewModel {
             }
         } catch {
             let ckError = error as? CKError
-            #if DEBUG
-            print("[HomeViewModel] loadChallenges failed: code=\(ckError?.code.rawValue as Any) \(error.localizedDescription)")
-            #endif
+            Logger.cloudKit.error("loadChallenges failed: code=\(ckError?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
             // Don't cry wolf: if cached challenges are already on screen, a failed
             // background refresh stays silent and retries on the next trigger. Only
             // surface a banner when there's genuinely nothing to show (or a hard

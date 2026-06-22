@@ -1,5 +1,15 @@
 import Foundation
 import CloudKit
+import OSLog
+
+/// App-wide unified logging. Visible in Console.app on any build (including
+/// TestFlight/App Store) — filter by subsystem `studio.ssb.challenges`.
+/// Values are logged `.public` so the actual error codes aren't redacted.
+extension Logger {
+    static let cloudKit = Logger(subsystem: "studio.ssb.challenges", category: "CloudKit")
+    static let sync     = Logger(subsystem: "studio.ssb.challenges", category: "Sync")
+    static let health   = Logger(subsystem: "studio.ssb.challenges", category: "HealthKit")
+}
 
 /// Central CloudKit access layer. Wraps the Public Database for all Challenge, Participation,
 /// and DailyScore records, and registers CloudKit subscriptions.
@@ -379,15 +389,11 @@ final class CloudKitManager: ObservableObject {
             } catch {
                 let ckError = error as? CKError
                 guard let code = ckError?.code, retryable.contains(code), attempt < maxAttempts else {
-                    #if DEBUG
-                    print("[CloudKitManager] read failed (attempt \(attempt)): \((error as? CKError)?.code.rawValue as Any) \(error.localizedDescription)")
-                    #endif
+                    Logger.cloudKit.error("read failed (attempt \(attempt, privacy: .public)): code=\(ckError?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
                     throw error
                 }
                 let delay = ckError?.retryAfterSeconds ?? Double(attempt)  // linear backoff fallback
-                #if DEBUG
-                print("[CloudKitManager] retryable error \(code) — retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                #endif
+                Logger.cloudKit.notice("retryable error \(code.rawValue, privacy: .public) — retrying in \(delay, privacy: .public)s (attempt \(attempt + 1, privacy: .public)/\(maxAttempts, privacy: .public))")
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 attempt += 1
             }

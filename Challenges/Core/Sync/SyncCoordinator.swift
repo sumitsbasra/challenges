@@ -117,6 +117,18 @@ actor SyncCoordinator {
         //   • Past day, no CloudKit record → sync (backfill for new joiners / first open).
         //   • Past day, CloudKit record with 0 pts → sync (may have been incomplete).
         //   • Past day, CloudKit record with pts > 0 → skip (trust the stored value).
+        // Sync this user's workouts for the window so other participants can see them.
+        // Runs independently of the day-score sync below (workouts exist even on days
+        // whose score is already settled). Deterministic ids make this an upsert.
+        let windowEnd = calendar.date(byAdding: .day, value: 1, to: endDay) ?? endDay
+        let hkWorkouts = await fetcher.workouts(from: startDay, to: windowEnd)
+        let workoutSummaries = hkWorkouts.map {
+            ActivityDataFetcher.summary(from: $0, participationID: participation.id, challengeID: challenge.id)
+        }
+        if !workoutSummaries.isEmpty {
+            try? await ck.saveWorkouts(workoutSummaries)
+        }
+
         let existingScores = (try? await ck.fetchDailyScores(participationID: participation.id)) ?? []
         let existingByID = Dictionary(existingScores.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
 

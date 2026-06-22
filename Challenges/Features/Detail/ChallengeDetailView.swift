@@ -476,8 +476,16 @@ private struct ParticipantDetailSheet: View {
     let challenge: Challenge
     let isCurrentUser: Bool
     @Environment(\.dismiss) private var dismiss
+    @State private var workouts: [WorkoutSummary] = []
 
     private var name: String { isCurrentUser ? "You" : participation.user.displayName }
+
+    private func loadWorkouts() async {
+        let all = (try? await CloudKitManager.shared.fetchWorkouts(challengeID: challenge.id)) ?? []
+        workouts = all
+            .filter { $0.participationID == participation.id }
+            .sorted { $0.date > $1.date }
+    }
 
     // MARK: Derived stats (past days only)
 
@@ -520,6 +528,10 @@ private struct ParticipantDetailSheet: View {
                                           title: isCurrentUser ? "My Points" : "Points")
                         DailyBreakdownView(participation: participation, challenge: challenge)
                     }
+
+                    if !workouts.isEmpty {
+                        workoutsSection
+                    }
                 }
                 .padding(16)
             }
@@ -531,8 +543,27 @@ private struct ParticipantDetailSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .task { await loadWorkouts() }
         }
         .presentationDetents([.large])
+    }
+
+    // MARK: Workouts
+
+    private var workoutsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            FitnessSectionHeader(title: "Workouts")
+            VStack(spacing: 0) {
+                ForEach(Array(workouts.enumerated()), id: \.element.id) { idx, workout in
+                    WorkoutRow(workout: workout)
+                    if idx < workouts.count - 1 {
+                        Divider().padding(.horizontal, 16)
+                    }
+                }
+            }
+            .background(Color.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
     }
 
     // MARK: Header
@@ -589,6 +620,42 @@ private struct ParticipantDetailSheet: View {
             StatTile(value: distanceText, label: "Total distance",
                      systemImage: "location.fill", tint: .moveRing)
         }
+    }
+}
+
+// MARK: - Workout Row
+
+private struct WorkoutRow: View {
+    let workout: WorkoutSummary
+
+    private var detail: String {
+        if workout.distance > 0 {
+            return Measurement(value: workout.distance, unit: UnitLength.meters)
+                .formatted(.measurement(width: .abbreviated, usage: .road,
+                                        numberFormatStyle: .number.precision(.fractionLength(1))))
+        }
+        return "\(Int(workout.activeEnergy)) cal"
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: workout.systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.moveRing)
+                .frame(width: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(workout.name).font(.subheadline.weight(.semibold))
+                Text(workout.date.formatted(.dateTime.month().day())).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(workout.durationText)
+                    .font(.subheadline.weight(.semibold)).monospacedDigit()
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 

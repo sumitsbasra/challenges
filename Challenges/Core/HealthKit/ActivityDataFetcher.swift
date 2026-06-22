@@ -122,6 +122,72 @@ actor ActivityDataFetcher {
         )
     }
 
+    // MARK: - Workouts
+
+    /// Returns all workouts that start within the given range, oldest first.
+    func workouts(from start: Date, to end: Date) async -> [HKWorkout] {
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: .workoutType(),
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
+            ) { _, samples, _ in
+                continuation.resume(returning: (samples as? [HKWorkout]) ?? [])
+            }
+            store.execute(query)
+        }
+    }
+
+    /// Builds a cross-device summary from a HealthKit workout. Resolves the display
+    /// name/icon here (where HealthKit is available) so other participants don't need it.
+    static func summary(from workout: HKWorkout, participationID: String, challengeID: String) -> WorkoutSummary {
+        let (name, icon) = workoutDisplay(workout.workoutActivityType)
+        let energy = workout.statistics(for: HKQuantityType(.activeEnergyBurned))?
+            .sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+        let distance = (workout.statistics(for: HKQuantityType(.distanceWalkingRunning))?.sumQuantity()
+            ?? workout.statistics(for: HKQuantityType(.distanceCycling))?.sumQuantity())?
+            .doubleValue(for: .meter()) ?? 0
+        return WorkoutSummary(
+            id: WorkoutSummary.makeID(participationID: participationID,
+                                      workoutUUID: workout.uuid.uuidString),
+            participationID: participationID,
+            challengeID: challengeID,
+            name: name,
+            systemImage: icon,
+            date: workout.startDate,
+            duration: workout.duration,
+            activeEnergy: energy,
+            distance: distance
+        )
+    }
+
+    /// Maps an activity type to a display name and SF Symbol; falls back to a generic workout.
+    static func workoutDisplay(_ type: HKWorkoutActivityType) -> (name: String, icon: String) {
+        switch type {
+        case .running:                    return ("Running", "figure.run")
+        case .walking:                    return ("Walking", "figure.walk")
+        case .cycling:                    return ("Cycling", "figure.outdoor.cycle")
+        case .hiking:                     return ("Hiking", "figure.hiking")
+        case .swimming:                   return ("Swimming", "figure.pool.swim")
+        case .traditionalStrengthTraining,
+             .functionalStrengthTraining: return ("Strength", "figure.strengthtraining.traditional")
+        case .highIntensityIntervalTraining: return ("HIIT", "figure.highintensity.intervaltraining")
+        case .yoga:                       return ("Yoga", "figure.yoga")
+        case .pilates:                    return ("Pilates", "figure.pilates")
+        case .coreTraining:               return ("Core", "figure.core.training")
+        case .elliptical:                 return ("Elliptical", "figure.elliptical")
+        case .rowing:                     return ("Rowing", "figure.rower")
+        case .cardioDance, .socialDance:  return ("Dance", "figure.dance")
+        case .stairClimbing, .stairs:     return ("Stairs", "figure.stair.stepper")
+        case .tennis:                     return ("Tennis", "figure.tennis")
+        case .basketball:                 return ("Basketball", "figure.basketball")
+        case .soccer:                     return ("Soccer", "figure.indoor.soccer")
+        default:                          return ("Workout", "figure.mixed.cardio")
+        }
+    }
+
     // MARK: - Private helpers
 
     /// Returns the cumulative sum for `type`, or nil if HealthKit returned an error.

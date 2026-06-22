@@ -42,6 +42,7 @@ A single over-achieved ring can reach the cap on its own, just like Apple. Scori
 - **Fair scoring** — Watch and non-Watch users compete on equal footing with matched 3-metric formulas; scoring mode is locked at join time
 - **Score deduplication** — aggregator deduplicates CloudKit records by calendar day (keeps highest) to prevent point inflation from save retries
 - **Score history chart** — line chart of daily points across the full challenge window, shown for both active and completed challenges
+- **Workout list** — each device syncs its own HealthKit workout summaries (type, duration, energy, distance) to CloudKit, so any participant's detail sheet shows the activities they logged
 - **Today's activity card** — Apple Fitness-style ring stack with Move/Exercise/Stand (Watch) or Steps/Exercise/Energy (iPhone) metrics; respects user's units preference (Imperial/Metric) for distance
 - **Instant home screen** — cache pre-populated before first SwiftUI frame so challenges appear immediately on every launch with no blank flash
 - **Watch ring fallback** — if the activity summary hasn't synced yet (common early morning), falls back to individual HealthKit queries so rings are never stuck at zero
@@ -128,6 +129,7 @@ Set these in the CloudKit Dashboard (required for queries to work):
 | `Challenge` | `inviteCode`, `status`, `startDate`, `creatorRef` |
 | `Participation` | `challengeRef`, `userRef`, `status` |
 | `DailyScore` | `challengeRef`, `participationRef`, `date` |
+| `Workout` | `challengeRef`, `participationRef` |
 
 > **Deploy the schema to Production before distributing.** CloudKit's Development (Xcode runs) and Production (TestFlight/App Store) environments have separate schemas and data. New fields and indexes — e.g. the `Users.avatarAsset` field — must be pushed via **CloudKit Dashboard → Deploy Schema Changes**, or that data silently fails to persist for TestFlight/App Store users.
 

@@ -24,6 +24,7 @@
 		A1000004 /* Participation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000004 /* Participation.swift */; };
 		A1000005 /* DailyScore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000005 /* DailyScore.swift */; };
 		A1000006 /* RingData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000006 /* RingData.swift */; };
+		A1000080 /* WorkoutSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000080 /* WorkoutSummary.swift */; };
 		A1000007 /* PointsCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000007 /* PointsCalculator.swift */; };
 		A1000008 /* GoalResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000008 /* GoalResolver.swift */; };
 		A1000009 /* ScoreAggregator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000009 /* ScoreAggregator.swift */; };
@@ -135,6 +136,7 @@
 		B1000004 /* Participation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Participation.swift; sourceTree = "<group>"; };
 		B1000005 /* DailyScore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyScore.swift; sourceTree = "<group>"; };
 		B1000006 /* RingData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingData.swift; sourceTree = "<group>"; };
+		B1000080 /* WorkoutSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSummary.swift; sourceTree = "<group>"; };
 		B1000007 /* PointsCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsCalculator.swift; sourceTree = "<group>"; };
 		B1000008 /* GoalResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoalResolver.swift; sourceTree = "<group>"; };
 		B1000009 /* ScoreAggregator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreAggregator.swift; sourceTree = "<group>"; };
@@ -317,6 +319,7 @@
 				B1000004 /* Participation.swift */,
 				B1000005 /* DailyScore.swift */,
 				B1000006 /* RingData.swift */,
+				B1000080 /* WorkoutSummary.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -672,6 +675,7 @@
 				A1000004 /* Participation.swift in Sources */,
 				A1000005 /* DailyScore.swift in Sources */,
 				A1000006 /* RingData.swift in Sources */,
+				A1000080 /* WorkoutSummary.swift in Sources */,
 				A1000007 /* PointsCalculator.swift in Sources */,
 				A1000008 /* GoalResolver.swift in Sources */,
 				A1000009 /* ScoreAggregator.swift in Sources */,

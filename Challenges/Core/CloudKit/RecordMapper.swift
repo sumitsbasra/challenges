@@ -12,6 +12,7 @@ enum RecordMapper {
         static let challenge     = "Challenge"
         static let participation = "Participation"
         static let dailyScore    = "DailyScore"
+        static let workout       = "Workout"
     }
 
     // MARK: - AppUser
@@ -214,6 +215,48 @@ enum RecordMapper {
         record["activeEnergyGoal"] = score.ringData.activeEnergyGoal
         record["totalSteps"]       = score.ringData.totalSteps
         record["distanceMeters"]   = score.ringData.distanceMeters
+        return record
+    }
+
+    // MARK: - WorkoutSummary
+
+    static func workout(from record: CKRecord) -> WorkoutSummary? {
+        guard
+            let participationRef = record["participationRef"] as? CKRecord.Reference,
+            let challengeRef     = record["challengeRef"] as? CKRecord.Reference,
+            let name             = record["name"] as? String,
+            let date             = record["date"] as? Date,
+            let duration         = record["duration"] as? Double
+        else {
+            Logger.cloudKit.error("RecordMapper.workout(from:) failed — record \(record.recordID.recordName, privacy: .public), fields: \(record.allKeys(), privacy: .public)")
+            return nil
+        }
+        return WorkoutSummary(
+            id: record.recordID.recordName,
+            participationID: participationRef.recordID.recordName,
+            challengeID: challengeRef.recordID.recordName,
+            name: name,
+            systemImage: record["systemImage"] as? String ?? "figure.mixed.cardio",
+            date: date,
+            duration: duration,
+            activeEnergy: record["activeEnergy"] as? Double ?? 0,
+            distance: record["distance"] as? Double ?? 0
+        )
+    }
+
+    static func record(from workout: WorkoutSummary) -> CKRecord {
+        let recordID = CKRecord.ID(recordName: workout.id)
+        let record = CKRecord(recordType: RecordType.workout, recordID: recordID)
+        record["participationRef"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: workout.participationID), action: .none)
+        record["challengeRef"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: workout.challengeID), action: .none)
+        record["name"]         = workout.name
+        record["systemImage"]  = workout.systemImage
+        record["date"]         = workout.date
+        record["duration"]     = workout.duration
+        record["activeEnergy"] = workout.activeEnergy
+        record["distance"]     = workout.distance
         return record
     }
 }

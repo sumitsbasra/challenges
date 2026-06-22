@@ -363,6 +363,35 @@ final class CloudKitManager: ObservableObject {
         }
     }
 
+    // MARK: - Workouts
+
+    /// Batch-upsert workout summaries. Deterministic recordNames make every write an
+    /// update, never a duplicate.
+    func saveWorkouts(_ workouts: [WorkoutSummary]) async throws {
+        guard !workouts.isEmpty else { return }
+        let records = workouts.map { RecordMapper.record(from: $0) }
+        let operation = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
+        operation.savePolicy = .changedKeys
+        operation.isAtomic = false
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            operation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success: continuation.resume()
+                case .failure(let error): continuation.resume(throwing: error)
+                }
+            }
+            publicDB.add(operation)
+        }
+    }
+
+    /// All workouts logged in a challenge (across participants).
+    func fetchWorkouts(challengeID: String) async throws -> [WorkoutSummary] {
+        let challengeRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: challengeID), action: .none)
+        let predicate = NSPredicate(format: "challengeRef == %@", challengeRef)
+        let query = CKQuery(recordType: RecordMapper.RecordType.workout, predicate: predicate)
+        return try await fetchAllRecords(matching: query).compactMap(RecordMapper.workout)
+    }
+
     func fetchDailyScores(challengeID: String) async throws -> [DailyScore] {
         let challengeRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: challengeID), action: .none)
         let predicate = NSPredicate(format: "challengeRef == %@", challengeRef)

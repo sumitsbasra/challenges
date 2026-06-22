@@ -58,7 +58,10 @@ actor SyncCoordinator {
             await updateWidgetState(userID: userID, activeChallenges: active)
             return results
         } catch {
-            Logger.sync.error("Failed to fetch challenges: \(error.localizedDescription, privacy: .public)")
+            // A cancelled fetch (view/task torn down) is benign — don't log it as an error.
+            if !error.isCancellation {
+                Logger.sync.error("Failed to fetch challenges: \(error.localizedDescription, privacy: .public)")
+            }
             return [:]
         }
     }

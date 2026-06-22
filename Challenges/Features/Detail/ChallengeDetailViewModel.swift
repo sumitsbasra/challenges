@@ -42,6 +42,7 @@ final class ChallengeDetailViewModel {
     struct Standing {
         let rank: Int
         let total: Int
+        let points: Double              // the user's own total
         let pointsBehindLeader: Double  // 0 when the user is 1st
         let pointsToNextRank: Double    // 0 when the user is 1st
     }
@@ -56,6 +57,7 @@ final class ChallengeDetailViewModel {
         return Standing(
             rank: me.rank,
             total: ranked.count,
+            points: me.totalPoints,
             pointsBehindLeader: max(0, leaderPoints - me.totalPoints),
             pointsToNextRank: max(0, toNext)
         )

@@ -26,7 +26,7 @@ struct MyProgressView: View {
             header
             metricsRow
             Divider()
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
             stepsDistanceRow
         }
         .background(Color.cardBackground)
@@ -43,7 +43,7 @@ struct MyProgressView: View {
             Spacer()
             rankPill
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.top, 16)
         .padding(.bottom, 12)
     }
@@ -65,54 +65,32 @@ struct MyProgressView: View {
     // MARK: - Rings + metrics
 
     private var metricsRow: some View {
-        HStack(alignment: .center, spacing: 16) {
-            // Rings — leading edge aligned with the card's 16pt padding
+        // Matches the home screen "Activity" card exactly: same ring view, same metric
+        // rows, same spacing — Watch shows Move/Exercise/Stand, iPhone shows
+        // Steps/Exercise/Energy with the dedicated iPhone ring colors.
+        HStack(alignment: .center, spacing: 28) {
             Group {
-                // Both paths now show 3 rings:
-                // Watch  → Move / Exercise / Stand
-                // iPhone → Steps / Exercise / Active Energy (outer→inner)
-                ThreeRingView(ringData: rings, size: 130)
-            }
-            .padding(.leading, 16)
-            .padding(.vertical, 14)
-
-            // Metric rows — frame fills remaining width so content spreads to the right edge
-            VStack(alignment: .leading, spacing: 10) {
                 if hasAppleWatch {
-                    MetricRowView(label: "Move",
-                                  actual: rings.moveCalories,
-                                  goal: rings.moveGoal,
-                                  unit: "CAL", color: .moveRing)
-                    Divider().opacity(0.2)
-                    MetricRowView(label: "Exercise",
-                                  actual: rings.exerciseMinutes,
-                                  goal: rings.exerciseGoal,
-                                  unit: "MIN", color: .exerciseRing)
-                    Divider().opacity(0.2)
-                    MetricRowView(label: "Stand",
-                                  actual: rings.standHours,
-                                  goal: rings.standGoal,
-                                  unit: "HRS", color: .standRing)
+                    ThreeRingView(ringData: rings, size: 132)
                 } else {
-                    MetricRowView(label: "Steps",
-                                  actual: rings.steps,
-                                  goal: rings.stepsGoal,
-                                  unit: "STEPS", color: .moveRing)
-                    Divider().opacity(0.2)
-                    MetricRowView(label: "Exercise",
-                                  actual: rings.exerciseMinutes,
-                                  goal: rings.exerciseGoal,
-                                  unit: "MIN", color: .exerciseRing)
-                    Divider().opacity(0.2)
-                    MetricRowView(label: "Energy",
-                                  actual: rings.activeEnergy,
-                                  goal: rings.activeEnergyGoal,
-                                  unit: "CAL", color: .standRing)
+                    IPhoneRingView(ringData: rings, size: 132)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                if hasAppleWatch {
+                    HomeMetricRow(label: "Move",     current: rings.moveCalories,    goal: rings.moveGoal,         unit: "cal", color: .moveRing)
+                    HomeMetricRow(label: "Exercise", current: rings.exerciseMinutes, goal: rings.exerciseGoal,     unit: "min", color: .exerciseRing)
+                    HomeMetricRow(label: "Stand",    current: rings.standHours,      goal: rings.standGoal,        unit: "hrs", color: .standRing)
+                } else {
+                    HomeMetricRow(label: "Steps",    current: rings.steps,           goal: rings.stepsGoal,        unit: "steps", color: .stepsColor)
+                    HomeMetricRow(label: "Exercise", current: rings.exerciseMinutes, goal: rings.exerciseGoal,     unit: "min",   color: .exerciseRing)
+                    HomeMetricRow(label: "Energy",   current: rings.activeEnergy,    goal: rings.activeEnergyGoal, unit: "cal",   color: .activeEnergyColor)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.trailing, 16)
         }
+        .padding(.horizontal, 20)
         .padding(.bottom, 16)
     }
 
@@ -181,47 +159,6 @@ struct MyProgressView: View {
     }
 }
 
-// MARK: - Metric Row
-
-/// Apple Fitness-style metric row: label on top, "actual/goal UNIT" below.
-private struct MetricRowView: View {
-    let label:  String
-    let actual: Double
-    let goal:   Double
-    let unit:   String
-    let color:  Color
-
-    // Format whole numbers without decimals; keep 1 decimal for fractional values (stand hours)
-    private func fmt(_ v: Double) -> String {
-        v.truncatingRemainder(dividingBy: 1) == 0
-            ? String(Int(v))
-            : String(format: "%.0f", v)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Text(fmt(actual))
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(color)
-                Text("/\(fmt(goal))")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(color.opacity(0.45))
-                Text(" \(unit)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.3)
-                    .foregroundStyle(color.opacity(0.6))
-                    .padding(.leading, 2)
-            }
-            .monospacedDigit()
-        }
-    }
-}
-
 // MARK: - Stat Cell (steps / distance)
 
 private struct StatCell: View {
@@ -286,27 +223,43 @@ private struct PointsCell: View {
 
 // MARK: - Preview
 
-#Preview {
-    ZStack {
-        Color.black.ignoresSafeArea()
-        MyProgressView(participation: Participation(
-            id: "p1",
-            challengeID: "c1",
-            user: AppUser(id: "u1", displayName: "Alex", appleUserID: "a1", hasAppleWatch: true),
-            joinedAt: Date(),
-            status: .active,
-            hasAppleWatch: true,
-            dailyScores: [
-                DailyScore(id: "s1", participationID: "p1", challengeID: "c1",
-                           date: Date(), points: 480,
-                           ringData: RingData(moveRingPct: 1.56, exerciseRingPct: 3.1,
-                                             standRingPct: 0.83, stepsPct: 0,
-                                             activeEnergyPct: 0, syncSource: .watch),
-                           lastSyncedAt: Date())
-            ],
-            totalPoints: 2180,
-            rank: 1
-        ))
-        .padding(.horizontal, 16)
+private func previewParticipation(watch: Bool) -> Participation {
+    var ring = RingData(
+        moveRingPct: 0.74, exerciseRingPct: 1.4, standRingPct: 0.83,
+        stepsPct: 0.82, activeEnergyPct: 0.84, syncSource: watch ? .watch : .iphone
+    )
+    ring.moveCalories = 520; ring.moveGoal = 700
+    ring.exerciseMinutes = 42; ring.exerciseGoal = 30
+    ring.standHours = 10; ring.standGoal = 12
+    ring.steps = 8_240; ring.stepsGoal = 10_000
+    ring.activeEnergy = 420; ring.activeEnergyGoal = 500
+    ring.totalSteps = 8_240; ring.distanceMeters = 5_400
+    return Participation(
+        id: "p1", challengeID: "c1",
+        user: AppUser(id: "u1", displayName: "Alex", appleUserID: "a1", hasAppleWatch: watch),
+        joinedAt: Date(), status: .active, hasAppleWatch: watch,
+        dailyScores: [DailyScore(id: "s1", participationID: "p1", challengeID: "c1",
+                                 date: Date(), points: 480, ringData: ring, lastSyncedAt: Date())],
+        totalPoints: 2180, rank: 1
+    )
+}
+
+#Preview("My Progress — Watch") {
+    UserDefaults.standard.set(true, forKey: "hasAppleWatch")
+    return ZStack {
+        Color.appBackground.ignoresSafeArea()
+        MyProgressView(participation: previewParticipation(watch: true))
+            .padding(.horizontal, 16)
     }
+    .preferredColorScheme(.dark)
+}
+
+#Preview("My Progress — iPhone") {
+    UserDefaults.standard.set(false, forKey: "hasAppleWatch")
+    return ZStack {
+        Color.appBackground.ignoresSafeArea()
+        MyProgressView(participation: previewParticipation(watch: false))
+            .padding(.horizontal, 16)
+    }
+    .preferredColorScheme(.dark)
 }

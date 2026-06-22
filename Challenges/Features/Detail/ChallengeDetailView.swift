@@ -29,13 +29,18 @@ struct ChallengeDetailView: View {
 
                 // 2. Standing summary (active) / results moment (completed)
                 if challenge.status == .active, let s = vm.standing {
-                    standingSummary(s)
+                    StandingSummaryCard(standing: s)
                         .padding(.horizontal, 16)
                         .padding(.top, 20)
                 } else if challenge.status == .completed, let s = vm.standing {
-                    resultsHeader(s)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 20)
+                    ResultsHeaderCard(
+                        standing: s,
+                        winnerName: vm.rankedParticipations.first.map {
+                            $0.user.id == session.userID ? "You" : $0.user.displayName
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
                 }
 
                 // 3. Activity hero card (current user's rings)
@@ -300,79 +305,6 @@ struct ChallengeDetailView: View {
         }
     }
 
-    // MARK: - Standing summary (active)
-
-    @ViewBuilder
-    private func standingSummary(_ s: ChallengeDetailViewModel.Standing) -> some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Your standing")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .tracking(0.5)
-                Text("\(ordinal(s.rank)) of \(s.total)")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                if s.rank == 1 {
-                    Text("In the lead 🏆")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.rankGold)
-                } else {
-                    Text("\(Int(s.pointsToNextRank).formatted()) pts to #\(s.rank - 1)")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.moveRing)
-                    Text("\(Int(s.pointsBehindLeader).formatted()) behind 1st")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity)
-        .background(Color.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-
-    // MARK: - Results header (completed)
-
-    @ViewBuilder
-    private func resultsHeader(_ s: ChallengeDetailViewModel.Standing) -> some View {
-        VStack(spacing: 10) {
-            if let winner = vm.rankedParticipations.first {
-                Text("🏆")
-                    .font(.system(size: 34))
-                Text("\(winner.user.id == session.userID ? "You" : winner.user.displayName) won")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
-            }
-            Text("You finished \(ordinal(s.rank)) of \(s.total) \(medal(s.rank))")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity)
-        .background(
-            LinearGradient(colors: [Color.rankGold.opacity(0.14), Color.cardBackground],
-                           startPoint: .top, endPoint: .bottom)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-
-    /// 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th", etc.
-    private func ordinal(_ n: Int) -> String {
-        let ones = n % 10, tens = (n / 10) % 10
-        let suffix: String
-        if tens == 1 { suffix = "th" }
-        else { switch ones { case 1: suffix = "st"; case 2: suffix = "nd"; case 3: suffix = "rd"; default: suffix = "th" } }
-        return "\(n)\(suffix)"
-    }
-
-    private func medal(_ rank: Int) -> String {
-        switch rank { case 1: return "🥇"; case 2: return "🥈"; case 3: return "🥉"; default: return "" }
-    }
 
     // MARK: - Invite
 
@@ -407,6 +339,138 @@ struct ChallengeDetailView: View {
     }
 }
 
+// MARK: - Rank formatting helpers
+
+/// 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th", etc.
+func rankOrdinal(_ n: Int) -> String {
+    let ones = n % 10, tens = (n / 10) % 10
+    let suffix: String
+    if tens == 1 { suffix = "th" }
+    else { switch ones { case 1: suffix = "st"; case 2: suffix = "nd"; case 3: suffix = "rd"; default: suffix = "th" } }
+    return "\(n)\(suffix)"
+}
+
+func rankMedal(_ rank: Int) -> String {
+    switch rank { case 1: return "🥇"; case 2: return "🥈"; case 3: return "🥉"; default: return "" }
+}
+
+func rankColor(_ rank: Int) -> Color {
+    switch rank {
+    case 1: return .rankGold
+    case 2: return .rankSilver
+    case 3: return .rankBronze
+    default: return .primary
+    }
+}
+
+// MARK: - Standing Summary Card (active)
+
+struct StandingSummaryCard: View {
+    let standing: ChallengeDetailViewModel.Standing
+
+    var body: some View {
+        let s = standing
+        let leaderPoints = s.points + s.pointsBehindLeader
+        let fill = leaderPoints > 0 ? s.points / leaderPoints : 1
+
+        VStack(alignment: .leading, spacing: 16) {
+            // Header: label + total points
+            HStack(alignment: .firstTextBaseline) {
+                Text("YOUR STANDING")
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.8)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(Int(s.points).formatted())
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                    Text("PTS")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Rank
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(rankOrdinal(s.rank))
+                    .font(.system(size: 42, weight: .heavy, design: .rounded))
+                    .foregroundStyle(rankColor(s.rank))
+                if !rankMedal(s.rank).isEmpty {
+                    Text(rankMedal(s.rank)).font(.system(size: 26))
+                }
+                Text("of \(s.total)")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            // Progress toward the leader + gap callout
+            VStack(alignment: .leading, spacing: 8) {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.08))
+                        Capsule()
+                            .fill(LinearGradient(colors: [.moveRing, .exerciseRing],
+                                                 startPoint: .leading, endPoint: .trailing))
+                            .frame(width: max(10, geo.size.width * min(max(fill, 0), 1)))
+                    }
+                }
+                .frame(height: 8)
+
+                if s.rank == 1 {
+                    Label("You're in the lead", systemImage: "crown.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.rankGold)
+                } else {
+                    HStack(spacing: 6) {
+                        Label("\(Int(s.pointsToNextRank).formatted()) to #\(s.rank - 1)",
+                              systemImage: "arrow.up.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.moveRing)
+                        Text("·").foregroundStyle(.tertiary)
+                        Text("\(Int(s.pointsBehindLeader).formatted()) behind 1st")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+// MARK: - Results Header Card (completed)
+
+struct ResultsHeaderCard: View {
+    let standing: ChallengeDetailViewModel.Standing
+    /// Display name of the winner ("You" if it's the current user); nil if unknown.
+    let winnerName: String?
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if let winnerName {
+                Text("🏆").font(.system(size: 34))
+                Text("\(winnerName) won")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+            }
+            Text("You finished \(rankOrdinal(standing.rank)) of \(standing.total) \(rankMedal(standing.rank))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(colors: [Color.rankGold.opacity(0.14), Color.cardBackground],
+                           startPoint: .top, endPoint: .bottom)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
 // MARK: - Participant Detail Sheet
 
 /// Tapping a leaderboard row opens this — a participant's rank, total, score history,
@@ -419,34 +483,69 @@ private struct ParticipantDetailSheet: View {
 
     private var name: String { isCurrentUser ? "You" : participation.user.displayName }
 
+    // MARK: Derived stats (past days only)
+
+    private var scores: [DailyScore] {
+        participation.dailyScores.filter { $0.date <= Date() }
+    }
+    private var bestDay: Double { scores.map(\.points).max() ?? 0 }
+    private var activeDays: Int { scores.filter { $0.points > 0 }.count }
+    private var dailyAvg: Double {
+        activeDays > 0 ? scores.map(\.points).reduce(0, +) / Double(activeDays) : 0
+    }
+    private var totalSteps: Double { scores.map { $0.ringData.totalSteps }.reduce(0, +) }
+    private var totalDistance: Double { scores.map { $0.ringData.distanceMeters }.reduce(0, +) }
+
+    /// Longest run of consecutive calendar days with points.
+    private var bestStreak: Int {
+        let cal = Calendar.current
+        let days = scores.filter { $0.points > 0 }
+            .map { cal.startOfDay(for: $0.date) }
+            .sorted()
+        guard !days.isEmpty else { return 0 }
+        var best = 1, current = 1
+        for i in 1..<days.count {
+            let expected = cal.date(byAdding: .day, value: 1, to: days[i - 1])
+            if let expected, cal.isDate(expected, inSameDayAs: days[i]) {
+                current += 1; best = max(best, current)
+            } else if !cal.isDate(days[i - 1], inSameDayAs: days[i]) {
+                current = 1
+            }
+        }
+        return best
+    }
+
+    private var elapsedDays: Int {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: challenge.startDate)
+        let end   = cal.startOfDay(for: min(challenge.endDate, Date()))
+        return max(1, (cal.dateComponents([.day], from: start, to: end).day ?? 0) + 1)
+    }
+
+    private var distanceText: String {
+        Measurement(value: totalDistance, unit: UnitLength.meters)
+            .formatted(.measurement(width: .abbreviated,
+                                    usage: .road,
+                                    numberFormatStyle: .number.precision(.fractionLength(1))))
+    }
+
+    private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(name).font(.title2.bold())
-                            Text("Rank #\(participation.rank)")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 0) {
-                            Text(Int(participation.totalPoints).formatted())
-                                .font(.system(size: 30, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color.moveRing)
-                            Text("points").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 4)
-                    .padding(.top, 8)
+                    header
 
-                    if participation.dailyScores.isEmpty {
-                        Text("No activity yet.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 48)
+                    if scores.isEmpty {
+                        ContentUnavailableView(
+                            "No activity yet",
+                            systemImage: "figure.run",
+                            description: Text("Scores will appear here once \(isCurrentUser ? "you start" : "they start") earning points.")
+                        )
+                        .padding(.top, 40)
                     } else {
+                        statsGrid
                         ScoreHistoryChart(participation: participation, challenge: challenge)
                         DailyBreakdownView(participation: participation, challengeStartDate: challenge.startDate)
                     }
@@ -462,7 +561,96 @@ private struct ParticipantDetailSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            avatar
+            VStack(alignment: .leading, spacing: 3) {
+                Text(name).font(.title2.bold())
+                HStack(spacing: 5) {
+                    Image(systemName: participation.hasAppleWatch ? "applewatch" : "iphone")
+                        .font(.system(size: 11))
+                    Text("Rank #\(participation.rank)")
+                        .font(.subheadline)
+                }
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(Int(participation.totalPoints).formatted())
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.moveRing)
+                Text("points").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var avatar: some View {
+        Circle()
+            .fill(Color.cardInset)
+            .frame(width: 52, height: 52)
+            .overlay {
+                if let img = AvatarCache.load(userID: participation.user.id)
+                    ?? participation.user.avatarURL.flatMap({ UIImage(contentsOfFile: $0.path) }) {
+                    Image(uiImage: img).resizable().scaledToFill().clipShape(Circle())
+                } else {
+                    Text(name.prefix(1).uppercased())
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+    }
+
+    // MARK: Stats grid
+
+    private var statsGrid: some View {
+        LazyVGrid(columns: columns, spacing: 12) {
+            StatTile(value: Int(bestDay).formatted(), label: "Best day",
+                     systemImage: "flame.fill", tint: .moveRing)
+            StatTile(value: Int(dailyAvg).formatted(), label: "Avg / day",
+                     systemImage: "chart.bar.fill", tint: .exerciseRing)
+            StatTile(value: "\(activeDays) of \(elapsedDays)", label: "Active days",
+                     systemImage: "calendar", tint: .standRing)
+            StatTile(value: "\(bestStreak)", label: bestStreak == 1 ? "Day streak" : "Best streak",
+                     systemImage: "bolt.fill", tint: .stepsColor)
+            StatTile(value: Int(totalSteps).formatted(), label: "Total steps",
+                     systemImage: "figure.walk", tint: .activeEnergyColor)
+            StatTile(value: distanceText, label: "Distance",
+                     systemImage: "location.fill", tint: .moveRing)
+        }
+    }
+}
+
+// MARK: - Stat Tile
+
+private struct StatTile: View {
+    let value: String
+    let label: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+            Text(value)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -784,3 +972,83 @@ struct FitnessSectionHeader: View {
         }
     }
 }
+
+// MARK: - Previews
+
+#if DEBUG
+private enum ChallengeDetailPreviewData {
+    static let user = AppUser(id: "u1", displayName: "Sumit", appleUserID: "a1", hasAppleWatch: true)
+
+    static func challenge() -> Challenge {
+        let cal = Calendar.current
+        return Challenge(
+            id: "c1", title: "Summer ☀️", creatorID: "u1",
+            startDate: cal.date(byAdding: .day, value: -4, to: Date())!,
+            endDate: cal.date(byAdding: .day, value: 2, to: Date())!,
+            status: .active, inviteCode: "MC8TEE",
+            createdAt: cal.date(byAdding: .day, value: -5, to: Date())!
+        )
+    }
+
+    static func participation() -> Participation {
+        let cal = Calendar.current
+        var p = Participation(
+            id: "p1", challengeID: "c1", user: user,
+            joinedAt: cal.date(byAdding: .day, value: -4, to: Date())!,
+            status: .active, hasAppleWatch: true
+        )
+        p.dailyScores = (0..<5).map { i in
+            var ring = RingData(moveRingPct: 1.1, exerciseRingPct: 1.4, standRingPct: 0.9,
+                                stepsPct: 0, activeEnergyPct: 0, syncSource: .watch)
+            ring.totalSteps = Double(6_000 + i * 1_500)
+            ring.distanceMeters = Double(4_000 + i * 1_200)
+            return DailyScore(
+                id: "s\(i)", participationID: "p1", challengeID: "c1",
+                date: cal.date(byAdding: .day, value: -4 + i, to: Date())!,
+                points: Double(380 + i * 60), ringData: ring, lastSyncedAt: Date()
+            )
+        }
+        p.totalPoints = p.dailyScores.map(\.points).reduce(0, +)
+        p.rank = 2
+        return p
+    }
+
+    static let standingSecond = ChallengeDetailViewModel.Standing(
+        rank: 2, total: 5, points: 2180, pointsBehindLeader: 120, pointsToNextRank: 120)
+    static let standingFirst = ChallengeDetailViewModel.Standing(
+        rank: 1, total: 5, points: 2300, pointsBehindLeader: 0, pointsToNextRank: 0)
+}
+
+#Preview("Standing — 2nd") {
+    StandingSummaryCard(standing: ChallengeDetailPreviewData.standingSecond)
+        .padding()
+        .frame(maxHeight: .infinity)
+        .background(Color.appBackground)
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Standing — leading") {
+    StandingSummaryCard(standing: ChallengeDetailPreviewData.standingFirst)
+        .padding()
+        .frame(maxHeight: .infinity)
+        .background(Color.appBackground)
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Results header") {
+    ResultsHeaderCard(standing: ChallengeDetailPreviewData.standingSecond, winnerName: "lucknell")
+        .padding()
+        .frame(maxHeight: .infinity)
+        .background(Color.appBackground)
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Participant sheet") {
+    ParticipantDetailSheet(
+        participation: ChallengeDetailPreviewData.participation(),
+        challenge: ChallengeDetailPreviewData.challenge(),
+        isCurrentUser: true
+    )
+    .preferredColorScheme(.dark)
+}
+#endif

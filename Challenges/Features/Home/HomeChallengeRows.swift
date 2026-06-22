@@ -267,7 +267,9 @@ struct HomeMetricRow: View {
             // Number line: "457/700 CAL" — all ring color, unit smaller.
             // Keep it on one line and scale down to fit (e.g. "2,582/10,000 STEPS").
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text("\(Int(current).formatted())/\(Int(goal).formatted())")
+                // Abbreviate the goal (10,000 → 10K) so long values like steps don't
+                // force the line to shrink. Small goals (700, 30, 12) are unchanged.
+                Text("\(Int(current).formatted())/\(Int(goal).formatted(.number.notation(.compactName)))")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(color)
                 Text(unit.uppercased())

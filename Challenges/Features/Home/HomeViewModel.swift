@@ -235,12 +235,19 @@ final class HomeViewModel {
             #if DEBUG
             print("[HomeViewModel] loadChallenges failed: code=\(ckError?.code.rawValue as Any) \(error.localizedDescription)")
             #endif
-            if ckError?.code == .networkUnavailable || ckError?.code == .networkFailure {
-                self.error = "No internet connection. Showing cached data."
-            } else if ckError?.code == .notAuthenticated {
+            // Don't cry wolf: if cached challenges are already on screen, a failed
+            // background refresh stays silent and retries on the next trigger. Only
+            // surface a banner when there's genuinely nothing to show (or a hard
+            // iCloud auth problem the user must act on).
+            let hasData = !activeItems.isEmpty || !upcomingChallenges.isEmpty || !completedItems.isEmpty
+            if ckError?.code == .notAuthenticated {
                 self.error = "iCloud sign-in required. Check Settings → iCloud."
-            } else {
-                self.error = "Couldn't refresh. Pull down to try again."
+            } else if !hasData {
+                if ckError?.code == .networkUnavailable || ckError?.code == .networkFailure {
+                    self.error = "No internet connection."
+                } else {
+                    self.error = "Couldn't refresh. Pull down to try again."
+                }
             }
         }
     }

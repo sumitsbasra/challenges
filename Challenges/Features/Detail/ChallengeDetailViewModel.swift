@@ -244,10 +244,15 @@ final class ChallengeDetailViewModel {
             #if DEBUG
             print("[ChallengeDetail] fetchAndUpdate failed: code=\(ck?.code.rawValue as Any) \(error.localizedDescription)")
             #endif
-            if ck?.code == .networkUnavailable || ck?.code == .networkFailure {
-                if participations.isEmpty { self.error = "No internet connection." }
-            } else {
-                self.error = "Couldn't load. Pull down to try again."
+            // Only surface a banner when there's nothing to show. If cached/already-
+            // loaded participations are on screen, a failed refresh stays silent and
+            // retries on the next trigger.
+            if participations.isEmpty {
+                if ck?.code == .networkUnavailable || ck?.code == .networkFailure {
+                    self.error = "No internet connection."
+                } else {
+                    self.error = "Couldn't load. Pull down to try again."
+                }
             }
         }
     }
@@ -398,8 +403,10 @@ final class ChallengeDetailViewModel {
             }
             leaderboardLoaded = true
             lastFetchDate = Date()
-            // Clear any stale error banner now that the leaderboard loaded.
-            self.error = nil
+            // Note: don't clear `error` here. The main error is owned by fetchAndUpdate
+            // (it clears it at the start of every load); clearing it on this secondary
+            // leaderboard refresh caused the banner to flash on/off when the two ran
+            // back to back.
 
             // Re-apply the live HealthKit overlay to ensure today's rings are correct,
             // then persist so the cache has real ring values for the next open.

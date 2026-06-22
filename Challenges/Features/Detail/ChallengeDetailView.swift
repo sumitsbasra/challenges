@@ -492,32 +492,6 @@ private struct ParticipantDetailSheet: View {
     private var totalSteps: Double { scores.map { $0.ringData.totalSteps }.reduce(0, +) }
     private var totalDistance: Double { scores.map { $0.ringData.distanceMeters }.reduce(0, +) }
 
-    /// Longest run of consecutive calendar days with points.
-    private var bestStreak: Int {
-        let cal = Calendar.current
-        let days = scores.filter { $0.points > 0 }
-            .map { cal.startOfDay(for: $0.date) }
-            .sorted()
-        guard !days.isEmpty else { return 0 }
-        var best = 1, current = 1
-        for i in 1..<days.count {
-            let expected = cal.date(byAdding: .day, value: 1, to: days[i - 1])
-            if let expected, cal.isDate(expected, inSameDayAs: days[i]) {
-                current += 1; best = max(best, current)
-            } else if !cal.isDate(days[i - 1], inSameDayAs: days[i]) {
-                current = 1
-            }
-        }
-        return best
-    }
-
-    private var elapsedDays: Int {
-        let cal = Calendar.current
-        let start = cal.startOfDay(for: challenge.startDate)
-        let end   = cal.startOfDay(for: min(challenge.endDate, Date()))
-        return max(1, (cal.dateComponents([.day], from: start, to: end).day ?? 0) + 1)
-    }
-
     private var distanceText: String {
         Measurement(value: totalDistance, unit: UnitLength.meters)
             .formatted(.measurement(width: .abbreviated,
@@ -542,8 +516,9 @@ private struct ParticipantDetailSheet: View {
                         .padding(.top, 40)
                     } else {
                         statsGrid
-                        ScoreHistoryChart(participation: participation, challenge: challenge)
-                        DailyBreakdownView(participation: participation, challengeStartDate: challenge.startDate)
+                        ScoreHistoryChart(participation: participation, challenge: challenge,
+                                          title: isCurrentUser ? "My Points" : "Points")
+                        DailyBreakdownView(participation: participation, challenge: challenge)
                     }
                 }
                 .padding(16)
@@ -570,7 +545,7 @@ private struct ParticipantDetailSheet: View {
                 HStack(spacing: 5) {
                     Image(systemName: participation.hasAppleWatch ? "applewatch" : "iphone")
                         .font(.system(size: 11))
-                    Text("Rank #\(participation.rank)")
+                    Text(participation.hasAppleWatch ? "Apple Watch" : "iPhone")
                         .font(.subheadline)
                 }
                 .foregroundStyle(.secondary)
@@ -609,13 +584,9 @@ private struct ParticipantDetailSheet: View {
                      systemImage: "flame.fill", tint: .moveRing)
             StatTile(value: Int(dailyAvg).formatted(), label: "Avg / day",
                      systemImage: "chart.bar.fill", tint: .exerciseRing)
-            StatTile(value: "\(activeDays) of \(elapsedDays)", label: "Active days",
-                     systemImage: "calendar", tint: .standRing)
-            StatTile(value: "\(bestStreak)", label: bestStreak == 1 ? "Day streak" : "Best streak",
-                     systemImage: "bolt.fill", tint: .stepsColor)
             StatTile(value: Int(totalSteps).formatted(), label: "Total steps",
                      systemImage: "figure.walk", tint: .activeEnergyColor)
-            StatTile(value: distanceText, label: "Distance",
+            StatTile(value: distanceText, label: "Total distance",
                      systemImage: "location.fill", tint: .moveRing)
         }
     }
@@ -864,6 +835,7 @@ private struct PodiumPillar: View {
 private struct ScoreHistoryChart: View {
     let participation: Participation
     let challenge: Challenge
+    var title: String = "My Points"
 
     private var scores: [DailyScore] {
         let today = Calendar.current.startOfDay(for: Date())
@@ -889,7 +861,7 @@ private struct ScoreHistoryChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            FitnessSectionHeader(title: "My Points")
+            FitnessSectionHeader(title: title)
 
             Chart(scores, id: \.id) { score in
                 let day = Calendar.current.startOfDay(for: score.date)

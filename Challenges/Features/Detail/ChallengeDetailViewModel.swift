@@ -408,11 +408,16 @@ final class ChallengeDetailViewModel {
             }
             ParticipationCache.save(participations, challengeID: challenge.id)
         } catch {
-            // Non-fatal — partial data is better than nothing; user can pull-to-refresh.
+            // Non-fatal — this is a background refresh of everyone's scores. Only surface
+            // an error when there's genuinely nothing to show; if the leaderboard already
+            // has participants/points (from the participation fetch or cache), stay quiet
+            // and let the next refresh/push retry silently.
             #if DEBUG
             print("[ChallengeDetail] loadLeaderboard failed: code=\((error as? CKError)?.code.rawValue as Any) \(error.localizedDescription)")
             #endif
-            self.error = "Couldn't load leaderboard. Pull down to try again."
+            if rankedParticipations.isEmpty {
+                self.error = "Couldn't load leaderboard. Pull down to try again."
+            }
         }
     }
 

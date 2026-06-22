@@ -27,12 +27,8 @@ struct ChallengeDetailView: View {
                 statusBanner
                     .padding(.top, 8)
 
-                // 2. Standing summary (active) / results moment (completed)
-                if challenge.status == .active, let s = vm.standing {
-                    StandingSummaryCard(standing: s)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 20)
-                } else if challenge.status == .completed, let s = vm.standing {
+                // 2. Results moment for completed challenges (winner + placement).
+                if challenge.status == .completed, let s = vm.standing {
                     ResultsHeaderCard(
                         standing: s,
                         winnerName: vm.rankedParticipations.first.map {

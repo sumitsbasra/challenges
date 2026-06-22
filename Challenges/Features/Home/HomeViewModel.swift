@@ -232,6 +232,9 @@ final class HomeViewModel {
                 }
             }
         } catch {
+            // A cancelled load (view/task torn down during launch or a scene transition)
+            // is benign — a newer load will run. Don't log it or show a banner.
+            if error.isCancellation { return }
             let ckError = error as? CKError
             Logger.cloudKit.error("loadChallenges failed: code=\(ckError?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
             // Don't cry wolf: if cached challenges are already on screen, a failed

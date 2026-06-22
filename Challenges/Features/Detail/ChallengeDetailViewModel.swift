@@ -239,6 +239,7 @@ final class ChallengeDetailViewModel {
             // while the fresh overlay runs in the background.
             ParticipationCache.save(participations, challengeID: challenge.id)
         } catch {
+            if error.isCancellation { return }
             let ck = error as? CKError
             Logger.cloudKit.error("fetchAndUpdate failed: code=\(ck?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
             // Only surface a banner when there's nothing to show. If cached/already-
@@ -412,6 +413,7 @@ final class ChallengeDetailViewModel {
             }
             ParticipationCache.save(participations, challengeID: challenge.id)
         } catch {
+            if error.isCancellation { return }
             // Non-fatal — this is a background refresh of everyone's scores. Only surface
             // an error when there's genuinely nothing to show; if the leaderboard already
             // has participants/points (from the participation fetch or cache), stay quiet

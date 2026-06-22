@@ -12,6 +12,18 @@ extension Logger {
     static let app      = Logger(subsystem: "studio.ssb.challenges", category: "App")
 }
 
+extension Error {
+    /// True when an operation was cancelled (e.g. a SwiftUI `.task` torn down on a view
+    /// transition cancels its in-flight CloudKit fetch). These are benign — a newer load
+    /// will run — so they should never surface an error banner.
+    var isCancellation: Bool {
+        if self is CancellationError { return true }
+        if let ck = self as? CKError, ck.code == .operationCancelled { return true }
+        if let url = self as? URLError, url.code == .cancelled { return true }
+        return false
+    }
+}
+
 /// Central CloudKit access layer. Wraps the Public Database for all Challenge, Participation,
 /// and DailyScore records, and registers CloudKit subscriptions.
 final class CloudKitManager: ObservableObject {
@@ -390,7 +402,10 @@ final class CloudKitManager: ObservableObject {
             } catch {
                 let ckError = error as? CKError
                 guard let code = ckError?.code, retryable.contains(code), attempt < maxAttempts else {
-                    Logger.cloudKit.error("read failed (attempt \(attempt, privacy: .public)): code=\(ckError?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
+                    // Cancellations are expected (view/task torn down) — don't log as errors.
+                    if !error.isCancellation {
+                        Logger.cloudKit.error("read failed (attempt \(attempt, privacy: .public)): code=\(ckError?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
+                    }
                     throw error
                 }
                 let delay = ckError?.retryAfterSeconds ?? Double(attempt)  // linear backoff fallback

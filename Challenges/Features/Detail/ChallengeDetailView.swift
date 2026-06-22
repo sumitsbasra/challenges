@@ -629,12 +629,18 @@ private struct WorkoutRow: View {
     let workout: WorkoutSummary
 
     private var detail: String {
-        if workout.distance > 0 {
-            return Measurement(value: workout.distance, unit: UnitLength.meters)
-                .formatted(.measurement(width: .abbreviated, usage: .road,
-                                        numberFormatStyle: .number.precision(.fractionLength(1))))
+        guard workout.distance > 0 else { return "\(Int(workout.activeEnergy)) cal" }
+        // Always show a fraction of a mile/km (never feet), respecting the user's
+        // Profile units preference, falling back to locale.
+        let usesMetric: Bool
+        if UserDefaults.standard.object(forKey: "preferredUnits") != nil {
+            usesMetric = UserDefaults.standard.string(forKey: "preferredUnits") == "Metric"
+        } else {
+            usesMetric = Locale.current.measurementSystem != .us
         }
-        return "\(Int(workout.activeEnergy)) cal"
+        return usesMetric
+            ? String(format: "%.1f km", workout.distance / 1000)
+            : String(format: "%.1f mi", workout.distance / 1609.344)
     }
 
     var body: some View {

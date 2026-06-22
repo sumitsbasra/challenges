@@ -32,6 +32,10 @@ final class HomeViewModel {
     var activeItems: [TodayItem] = []
     /// Completed challenges with final rank data.
     var completedItems: [TodayItem] = []
+
+    /// Lifetime record across completed challenges.
+    var challengesDone: Int { completedItems.count }
+    var challengesWon: Int { completedItems.filter { $0.rank == 1 }.count }
     /// Upcoming (pending) challenges — shown below active.
     var upcomingChallenges: [Challenge] = []
     /// Completed challenges — hidden unless showCompleted = true.

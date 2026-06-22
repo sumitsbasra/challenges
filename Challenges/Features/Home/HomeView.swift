@@ -191,6 +191,10 @@ struct HomeView: View {
                 VStack(spacing: 24) {
                     if let error = vm.error { errorBanner(error).padding(.horizontal, 16) }
                     activitySection.padding(.top, 8)
+                    // Lifetime record — only once the user has finished a challenge.
+                    if vm.challengesDone > 0 {
+                        recordCard.padding(.horizontal, 16)
+                    }
                     // Only show the active/upcoming section when it has content —
                     // avoids a floating "Challenges" header with nothing below it
                     // when the user has only completed challenges.
@@ -237,6 +241,24 @@ struct HomeView: View {
 
     private var activitySection: some View {
         ringsCard.padding(.horizontal, 16)
+    }
+
+    // MARK: - Record Card (challenges done / won)
+
+    private var recordCard: some View {
+        HStack(spacing: 0) {
+            RecordCell(value: vm.challengesDone, label: "Challenges done",
+                       systemImage: "flag.checkered", tint: .exerciseRing)
+                .frame(maxWidth: .infinity)
+            Color.fitnessSeparator
+                .frame(width: 0.5, height: 40)
+            RecordCell(value: vm.challengesWon, label: "Challenges won",
+                       systemImage: "trophy.fill", tint: .rankGold)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.vertical, 16)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     // MARK: - Rings Card
@@ -405,6 +427,32 @@ struct HomeView: View {
                     Circle().fill(Color.cardBackground)
                     Circle().fill(Color.moveRing.opacity(0.18))
                 }
+        }
+    }
+}
+
+// MARK: - Record Cell (challenges done / won)
+
+private struct RecordCell: View {
+    let value: Int
+    let label: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tint)
+                Text("\(value)")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .monospacedDigit()
+            }
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

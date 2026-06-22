@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import OSLog
 
 /// Schedules and cancels local notifications for all challenge lifecycle events.
 ///
@@ -63,9 +64,7 @@ enum NotificationScheduler {
             do {
                 try await center.add(req)
             } catch {
-                #if DEBUG
-                print("[NotificationScheduler] Failed to add \(req.identifier): \(error)")
-                #endif
+                Logger.sync.error("NotificationScheduler failed to add \(req.identifier, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
     }

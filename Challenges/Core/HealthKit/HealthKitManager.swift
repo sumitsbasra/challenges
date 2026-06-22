@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import OSLog
 
 /// Manages HealthKit authorization and provides a single shared `HKHealthStore`.
 @MainActor
@@ -135,13 +136,11 @@ final class HealthKitManager: ObservableObject {
             store.execute(query)
 
             store.enableBackgroundDelivery(for: type, frequency: .hourly) { success, error in
-                #if DEBUG
                 if let error {
-                    print("[HealthKitManager] enableBackgroundDelivery failed for \(type): \(error)")
+                    Logger.health.error("enableBackgroundDelivery failed for \(type, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 } else {
-                    print("[HealthKitManager] background delivery enabled for \(type): \(success)")
+                    Logger.health.notice("background delivery enabled for \(type, privacy: .public): \(success, privacy: .public)")
                 }
-                #endif
             }
         }
     }

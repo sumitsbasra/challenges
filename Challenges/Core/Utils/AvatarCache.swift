@@ -1,4 +1,5 @@
 import UIKit
+import OSLog
 
 /// Stores and retrieves avatar images from the app's Documents directory.
 /// This gives instant local access without waiting for CloudKit to round-trip.
@@ -18,9 +19,7 @@ enum AvatarCache {
         do {
             try data.write(to: destination)
         } catch {
-            #if DEBUG
-            print("[AvatarCache] Failed to save avatar for \(userID): \(error)")
-            #endif
+            Logger.app.error("AvatarCache save failed for \(userID, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return nil
         }
         return destination
@@ -43,9 +42,7 @@ enum AvatarCache {
         do {
             try data.write(to: destination)
         } catch {
-            #if DEBUG
-            print("[AvatarCache] Failed to cache avatar data for \(userID): \(error)")
-            #endif
+            Logger.app.error("AvatarCache cache failed for \(userID, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 

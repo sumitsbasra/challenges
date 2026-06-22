@@ -1,5 +1,6 @@
 import Foundation
 import CloudKit
+import OSLog
 
 /// Converts between CKRecord and Swift model types.
 enum RecordMapper {
@@ -21,9 +22,7 @@ enum RecordMapper {
             let appleUserID = record["appleUserID"] as? String,
             let hasWatch    = record["hasAppleWatch"] as? Int
         else {
-            #if DEBUG
-            print("[RecordMapper] user(from:) failed — record \(record.recordID.recordName), fields: \(record.allKeys())")
-            #endif
+            Logger.cloudKit.error("RecordMapper.user(from:) failed — record \(record.recordID.recordName, privacy: .public), fields: \(record.allKeys(), privacy: .public)")
             return nil
         }
 
@@ -69,9 +68,7 @@ enum RecordMapper {
             let inviteCode = record["inviteCode"] as? String,
             let createdAt  = record["createdAt"] as? Date
         else {
-            #if DEBUG
-            print("[RecordMapper] challenge(from:) failed — record \(record.recordID.recordName), fields: \(record.allKeys())")
-            #endif
+            Logger.cloudKit.error("RecordMapper.challenge(from:) failed — record \(record.recordID.recordName, privacy: .public), fields: \(record.allKeys(), privacy: .public)")
             return nil
         }
 
@@ -112,9 +109,7 @@ enum RecordMapper {
             let status       = ParticipationStatus(rawValue: statusStr),
             let hasWatch     = record["hasAppleWatch"] as? Int
         else {
-            #if DEBUG
-            print("[RecordMapper] participation(from:) failed — record \(record.recordID.recordName), fields: \(record.allKeys())")
-            #endif
+            Logger.cloudKit.error("RecordMapper.participation(from:) failed — record \(record.recordID.recordName, privacy: .public), fields: \(record.allKeys(), privacy: .public)")
             return nil
         }
 
@@ -156,9 +151,7 @@ enum RecordMapper {
             let syncSourceStr    = record["syncSource"] as? String,
             let syncSource       = SyncSource(rawValue: syncSourceStr)
         else {
-            #if DEBUG
-            print("[RecordMapper] dailyScore(from:) failed — record \(record.recordID.recordName), fields: \(record.allKeys())")
-            #endif
+            Logger.cloudKit.error("RecordMapper.dailyScore(from:) failed — record \(record.recordID.recordName, privacy: .public), fields: \(record.allKeys(), privacy: .public)")
             return nil
         }
 

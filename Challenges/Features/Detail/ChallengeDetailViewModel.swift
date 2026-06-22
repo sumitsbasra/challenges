@@ -187,9 +187,7 @@ final class ChallengeDetailViewModel {
             ParticipationCache.save(participations, challengeID: challenge.id)
             NotificationCenter.default.post(name: .participationDidChange, object: nil)
         } catch {
-            #if DEBUG
-            print("[ChallengeDetail] recreateCreatorParticipation failed: \(error)")
-            #endif
+            Logger.cloudKit.error("recreateCreatorParticipation failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 
 @MainActor
 @Observable
@@ -85,9 +86,7 @@ final class NewChallengeViewModel {
         }
         if let error = lastParticipationError {
             self.error = "Challenge created but auto-join failed. Please try again."
-            #if DEBUG
-            print("[NewChallenge] saveParticipation failed after 3 attempts: \(error)")
-            #endif
+            Logger.cloudKit.error("NewChallenge saveParticipation failed after 3 attempts: \(error.localizedDescription, privacy: .public)")
             return  // Don't show the success screen — creator has no participation record
         }
 

@@ -9,6 +9,7 @@ extension Logger {
     static let cloudKit = Logger(subsystem: "studio.ssb.challenges", category: "CloudKit")
     static let sync     = Logger(subsystem: "studio.ssb.challenges", category: "Sync")
     static let health   = Logger(subsystem: "studio.ssb.challenges", category: "HealthKit")
+    static let app      = Logger(subsystem: "studio.ssb.challenges", category: "App")
 }
 
 /// Central CloudKit access layer. Wraps the Public Database for all Challenge, Participation,
@@ -448,9 +449,7 @@ final class CloudKitManager: ObservableObject {
         do {
             currentUserID = try await fetchCurrentUserRecordID().recordName
         } catch {
-            #if DEBUG
-            print("[CloudKitManager] registerSubscriptions: failed to fetch current user ID — \(error). Skipping participation subscription.")
-            #endif
+            Logger.cloudKit.error("registerSubscriptions: failed to fetch current user ID — \(error.localizedDescription, privacy: .public). Skipping participation subscription.")
             return
         }
         let userRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: currentUserID), action: .none)
@@ -497,20 +496,14 @@ final class CloudKitManager: ObservableObject {
                 || ckError?.code == .serviceUnavailable
                 || ckError?.code == .requestRateLimited
 
-            #if DEBUG
-            print("[CloudKitManager] registerSubscriptions attempt \(attempt) failed: \(error)")
-            #endif
+            Logger.cloudKit.error("registerSubscriptions attempt \(attempt, privacy: .public) failed: code=\(ckError?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
 
             if isRetryable && attempt < maxAttempts {
-                #if DEBUG
-                print("[CloudKitManager] Retrying subscription registration in \(retryDelay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                #endif
+                Logger.cloudKit.notice("Retrying subscription registration in \(retryDelay, privacy: .public)s (attempt \(attempt + 1, privacy: .public)/\(maxAttempts, privacy: .public))")
                 try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
                 await registerSubscriptionsWithRetry(subscriptions: subscriptions, attempt: attempt + 1)
             } else {
-                #if DEBUG
-                print("[CloudKitManager] registerSubscriptions failed after \(attempt) attempt(s): \(error)")
-                #endif
+                Logger.cloudKit.error("registerSubscriptions gave up after \(attempt, privacy: .public) attempt(s)")
             }
         }
     }

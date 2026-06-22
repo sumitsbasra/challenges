@@ -2,6 +2,7 @@ import Foundation
 import AuthenticationServices
 import CloudKit
 import Security
+import OSLog
 
 /// Manages Sign in with Apple and maps the Apple user identity to a CloudKit record ID.
 @MainActor
@@ -70,9 +71,7 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
         didCompleteWithError error: Error
     ) {
         // User cancelled or error — remain signed out.
-        #if DEBUG
-        print("[AuthManager] Sign in failed: \(error.localizedDescription)")
-        #endif
+        Logger.app.error("Sign in failed: \(error.localizedDescription, privacy: .public)")
     }
 
     // MARK: - Handle successful credential
@@ -142,9 +141,7 @@ final class AuthManager: NSObject, ObservableObject, ASAuthorizationControllerDe
             try await CloudKitManager.shared.saveUser(user)
 
         } catch {
-            #if DEBUG
-            print("[AuthManager] CloudKit linkage failed: \(error.localizedDescription)")
-            #endif
+            Logger.app.error("CloudKit linkage failed: \(error.localizedDescription, privacy: .public)")
             // pendingUser may be nil here if CKContainer.userRecordID() itself failed
             // (e.g. no iCloud account). Fall back to a local-only user so onboarding
             // can still proceed and HealthKit permissions can still be requested.

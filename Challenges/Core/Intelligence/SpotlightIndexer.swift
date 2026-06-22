@@ -1,5 +1,6 @@
 import CoreSpotlight
 import UIKit
+import OSLog
 
 /// Indexes challenge records into Core Spotlight so they appear in system search results.
 ///
@@ -21,11 +22,9 @@ enum SpotlightIndexer {
         guard !items.isEmpty else { return }
 
         CSSearchableIndex.default().indexSearchableItems(items) { error in
-            #if DEBUG
             if let error {
-                print("[SpotlightIndexer] Indexing failed: \(error.localizedDescription)")
+                Logger.app.error("Spotlight indexing failed: \(error.localizedDescription, privacy: .public)")
             }
-            #endif
         }
     }
 
@@ -36,11 +35,9 @@ enum SpotlightIndexer {
         CSSearchableIndex.default().deleteSearchableItems(
             withDomainIdentifiers: [domainIdentifier]
         ) { error in
-            #if DEBUG
             if let error {
-                print("[SpotlightIndexer] Removal failed: \(error.localizedDescription)")
+                Logger.app.error("Spotlight removal failed: \(error.localizedDescription, privacy: .public)")
             }
-            #endif
         }
     }
 

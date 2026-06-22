@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 import AuthenticationServices
 import UIKit
 import UserNotifications
@@ -282,13 +283,11 @@ struct OnboardingView: View {
     /// once the user has responded (allow or deny).
     private func requestNotifications() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            #if DEBUG
             if let error = error {
-                print("[Onboarding] Notification authorization error: \(error)")
+                Logger.app.error("Notification authorization error: \(error.localizedDescription, privacy: .public)")
             } else {
-                print("[Onboarding] Notification authorization granted: \(granted)")
+                Logger.app.notice("Notification authorization granted: \(granted, privacy: .public)")
             }
-            #endif
             DispatchQueue.main.async {
                 startWelcomeRings()
                 withAnimation(.easeInOut(duration: 0.45)) { step = .welcome }

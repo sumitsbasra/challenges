@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 struct DailyScore: Identifiable, Codable {
     /// Deterministic: "\(participationID)_\(dateString)" where dateString = "yyyy-MM-dd".
@@ -31,9 +32,7 @@ struct DailyScore: Identifiable, Codable {
         noonComponents.minute = 0
         noonComponents.second = 0
         guard let noon = cal.date(from: noonComponents) else {
-            #if DEBUG
-            print("[DailyScore] noonUTC(for:) failed to compute noon for \(date) — falling back to input date")
-            #endif
+            Logger.app.error("DailyScore.noonUTC failed to compute noon for \(date, privacy: .public) — falling back to input date")
             return date
         }
         return noon

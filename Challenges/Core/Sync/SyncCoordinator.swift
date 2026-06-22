@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import OSLog
 
 
 /// Orchestrates the core app loop:
@@ -57,9 +58,7 @@ actor SyncCoordinator {
             await updateWidgetState(userID: userID, activeChallenges: active)
             return results
         } catch {
-            #if DEBUG
-            print("[SyncCoordinator] Failed to fetch challenges: \(error)")
-            #endif
+            Logger.sync.error("Failed to fetch challenges: \(error.localizedDescription, privacy: .public)")
             return [:]
         }
     }
@@ -100,9 +99,7 @@ actor SyncCoordinator {
         while day <= endDay {
             days.append(day)
             guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
-                #if DEBUG
-                print("[SyncCoordinator] date(byAdding:) returned nil for \(day) — stopping day enumeration")
-                #endif
+                Logger.sync.error("date(byAdding:) returned nil for \(day, privacy: .public) — stopping day enumeration")
                 break
             }
             day = nextDay
@@ -238,9 +235,7 @@ actor SyncCoordinator {
         do {
             try await ck.saveDailyScores(scores)
         } catch {
-            #if DEBUG
-            print("[SyncCoordinator] Failed to save scores for challenge \(challenge.id): \(error)")
-            #endif
+            Logger.sync.error("Failed to save scores for challenge \(challenge.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
 
         // Return the full picture: preserved existing scores (pts > 0, not re-synced)
@@ -305,9 +300,7 @@ actor SyncCoordinator {
             )
             WidgetDataWriter.write(state: state)
         } catch {
-            #if DEBUG
-            print("[SyncCoordinator] updateWidgetState failed for challenge \(topChallenge.id): \(error)")
-            #endif
+            Logger.sync.error("updateWidgetState failed for challenge \(topChallenge.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -319,15 +312,11 @@ actor SyncCoordinator {
                 try await ck.updateChallengeStatus(challenge.id, status: status)
                 return
             } catch {
-                #if DEBUG
-                print("[SyncCoordinator] Status transition \(challenge.id) → \(status) failed (attempt \(attempt)): \(error)")
-                #endif
+                Logger.sync.error("Status transition \(challenge.id, privacy: .public) → \(status.rawValue, privacy: .public) failed (attempt \(attempt, privacy: .public)): \(error.localizedDescription, privacy: .public)")
                 if attempt <= maxRetries {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                 } else {
-                    #if DEBUG
-                    print("[SyncCoordinator] Status transition \(challenge.id) → \(status) failed after \(maxRetries + 1) attempts — giving up.")
-                    #endif
+                    Logger.sync.error("Status transition \(challenge.id, privacy: .public) → \(status.rawValue, privacy: .public) gave up after \(maxRetries + 1, privacy: .public) attempts")
                 }
             }
         }

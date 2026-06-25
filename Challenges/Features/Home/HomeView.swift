@@ -193,7 +193,8 @@ struct HomeView: View {
                     activitySection.padding(.top, 8)
                     // Lifetime record — only once the user has finished a challenge.
                     if vm.challengesDone > 0 {
-                        recordCard.padding(.horizontal, 16)
+                        ChallengeRecordCard(done: vm.challengesDone, won: vm.challengesWon)
+                            .padding(.horizontal, 16)
                     }
                     // Only show the active/upcoming section when it has content —
                     // avoids a floating "Challenges" header with nothing below it
@@ -241,24 +242,6 @@ struct HomeView: View {
 
     private var activitySection: some View {
         ringsCard.padding(.horizontal, 16)
-    }
-
-    // MARK: - Record Card (challenges done / won)
-
-    private var recordCard: some View {
-        HStack(spacing: 0) {
-            RecordCell(value: vm.challengesDone, label: "Challenges done",
-                       systemImage: "flag.checkered", tint: .exerciseRing)
-                .frame(maxWidth: .infinity)
-            Color.fitnessSeparator
-                .frame(width: 0.5, height: 40)
-            RecordCell(value: vm.challengesWon, label: "Challenges won",
-                       systemImage: "trophy.fill", tint: .rankGold)
-                .frame(maxWidth: .infinity)
-        }
-        .padding(.vertical, 16)
-        .background(Color.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     // MARK: - Rings Card
@@ -431,7 +414,28 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Record Cell (challenges done / won)
+// MARK: - Challenge Record Card (done / won)
+
+struct ChallengeRecordCard: View {
+    let done: Int
+    let won: Int
+
+    var body: some View {
+        HStack(spacing: 0) {
+            RecordCell(value: done, label: "Completed",
+                       systemImage: "flag.checkered", tint: .exerciseRing)
+                .frame(maxWidth: .infinity)
+            Color.fitnessSeparator
+                .frame(width: 0.5, height: 40)
+            RecordCell(value: won, label: "Won",
+                       systemImage: "trophy.fill", tint: .rankGold)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.vertical, 16)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
 
 private struct RecordCell: View {
     let value: Int
@@ -455,4 +459,15 @@ private struct RecordCell: View {
                 .foregroundStyle(.secondary)
         }
     }
+}
+
+#Preview("Record Card") {
+    VStack(spacing: 16) {
+        ChallengeRecordCard(done: 7, won: 3)
+        ChallengeRecordCard(done: 1, won: 0)
+    }
+    .padding()
+    .frame(maxHeight: .infinity)
+    .background(Color.appBackground)
+    .preferredColorScheme(.dark)
 }

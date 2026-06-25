@@ -1,28 +1,138 @@
 import SwiftUI
+import UIKit
+
+private extension Color {
+    /// The vivid leading-edge shade for the lengthwise gradient (base color at the tail →
+    /// this at the tip). Like Apple, the tip is brighter and shifts hue slightly toward
+    /// magenta/warm (Move red → pink, Exercise green → lighter), staying saturated.
+    var ringLeadingShade: Color {
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(self).getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        var hue = h - 0.03
+        if hue < 0 { hue += 1 }
+        return Color(hue: Double(hue),
+                     saturation: Double(max(0, s - 0.05)),
+                     brightness: Double(min(1, b + 0.23)),
+                     opacity: Double(a))
+    }
+
+    /// Linear RGB blend toward `other` by `fraction` (0…1).
+    func blended(to other: Color, fraction: Double) -> Color {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        UIColor(self).getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        UIColor(other).getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        let f = CGFloat(min(max(fraction, 0), 1))
+        return Color(red: Double(r1 + (r2 - r1) * f),
+                     green: Double(g1 + (g2 - g1) * f),
+                     blue: Double(b1 + (b2 - b1) * f))
+    }
+}
 
 // MARK: - Single Ring
 
-/// Animated circular activity ring with AngularGradient fill and tip glow.
-/// Matches Apple Fitness ring visual fidelity: vibrant color, depth gradient, soft tip glow.
+/// Animated circular activity ring.
+/// Matches Apple Fitness: solid vibrant color, and when a ring exceeds 100% the second
+/// lap stacks on top of the first with a soft shadow cast by its leading tip.
 struct ActivityRingView: View {
 
-    let progress: Double   // 0.0 – 2.0+ (values above 1.0 draw a second inner arc)
+    let progress: Double   // 0.0 – 2.0+ (values above 1.0 draw a second lap)
     let color: Color
     let lineWidth: CGFloat
 
     @State private var animatedProgress: Double = 0
 
     private var capped: Double { min(animatedProgress, 1.0) }
-    private var over:   Double { max(animatedProgress - 1.0, 0) }
+    private var over:   Double { min(max(animatedProgress - 1.0, 0), 0.9999) }
+
+    /// Color at the 12 o'clock wrap point — the shade where the first lap ends and the
+    /// second lap begins. Making both laps meet at this exact shade keeps the wrap
+    /// seamless, with the brightest reserved for the true leading tip.
+    private var wrapShade: Color {
+        guard animatedProgress > 1 else { return color }
+        return color.blended(to: color.ringLeadingShade, fraction: 1.0 / animatedProgress)
+    }
+
+    /// First-lap fill (tail → wrap). When there's no second lap it runs all the way to the
+    /// bright leading shade; when overlapped it stops at `wrapShade` so the wrap matches.
+    private var firstLapGradient: AngularGradient {
+        AngularGradient(
+            gradient: Gradient(colors: [color, over > 0 ? wrapShade : color.ringLeadingShade]),
+            center: .center,
+            startAngle: .degrees(0),
+            endAngle: .degrees(360 * max(capped, 0.0001))
+        )
+    }
+
+    /// Second-lap fill (wrap → bright tip), continuing the first lap's gradient so the
+    /// 12 o'clock join is seamless. Spans only the drawn arc.
+    private var secondLapGradient: AngularGradient {
+        AngularGradient(
+            gradient: Gradient(colors: [wrapShade, color.ringLeadingShade]),
+            center: .center,
+            startAngle: .degrees(0),
+            endAngle: .degrees(360 * max(over, 0.0001))
+        )
+    }
 
     var body: some View {
-        ZStack {
-            trackRing
-            if capped > 0 { mainArc }
-            if over > 0 {
-                overShadowArc  // dark blurred arc — edges bleed beyond overArc stroke
-                overArc        // solid color arc covers shadow center
+        GeometryReader { geo in
+            let radius = min(geo.size.width, geo.size.height) / 2
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+
+            ZStack {
+                // Dim track.
+                Circle().stroke(color.opacity(0.18), lineWidth: lineWidth)
+
+                // First lap.
+                Circle()
+                    .trim(from: 0, to: capped)
+                    .stroke(firstLapGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+
+                // Second lap (over 100%), stacked on top. Its start cap at 12 matches the
+                // lap below (wrapShade), so the start stays seamless.
+                if over > 0 {
+                    // Soft shadow under the leading tip, offset downward (global top light),
+                    // drawn BENEATH the second lap so only the part below the tip shows.
+                    // It's a dark blur, not a bright shape, so nothing reads as a circle;
+                    // and being tip-local, the start at 12 stays clean.
+                    Circle()
+                        .fill(Color.black.opacity(0.7))
+                        .frame(width: lineWidth * 0.9, height: lineWidth * 0.9)
+                        .blur(radius: lineWidth * 0.14)
+                        .position(tipPoint(for: over, center: center, radius: radius))
+                        .offset(y: lineWidth * 0.24)
+
+                    Circle()
+                        .trim(from: 0, to: over)
+                        .stroke(secondLapGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+
+                // Cross-width sheen: a whisper of convex shading so the band reads as a
+                // gently rounded tube without dulling the color. No inner-edge darkening
+                // (keeps colors vivid edge-to-edge); just a soft center highlight and a
+                // faint outer edge. Both laps share the radius, so one overlay covers
+                // whichever is on top; trimmed to the drawn arc so the track stays flat.
+                Circle()
+                    .trim(from: 0, to: capped)
+                    .stroke(
+                        RadialGradient(
+                            gradient: Gradient(stops: [
+                                .init(color: .clear,               location: 0.0),
+                                .init(color: .white.opacity(0.06), location: 0.6),   // barely-there center highlight
+                                .init(color: .black.opacity(0.04), location: 1.0),   // whisper of an outer edge
+                            ]),
+                            center: .center,
+                            startRadius: radius - lineWidth / 2,
+                            endRadius: radius + lineWidth / 2
+                        ),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
             }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .onAppear {
             withAnimation(.interpolatingSpring(stiffness: 42, damping: 10).delay(0.05)) {
@@ -36,42 +146,11 @@ struct ActivityRingView: View {
         }
     }
 
-    // MARK: - Sub-views
-
-    /// Dim track behind the arc.
-    private var trackRing: some View {
-        Circle()
-            .stroke(color.opacity(0.18), lineWidth: lineWidth)
-    }
-
-    /// Main arc: solid color, rounded ends.
-    private var mainArc: some View {
-        Circle()
-            .trim(from: 0, to: capped)
-            .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-            .rotationEffect(.degrees(-90))
-    }
-
-    /// Shadow only near the tip of the overArc (last 10% of the arc).
-    /// Keeps shadow away from 12 o'clock for partial arcs, while for 200%
-    /// it covers the region just before 12 o'clock where it bleeds visibly.
-    private var overShadowArc: some View {
-        let clamped = min(over, 0.9999)
-        let shadowStart = max(clamped - 0.10, 0)
-        return Circle()
-            .trim(from: shadowStart, to: clamped)
-            .stroke(Color.black.opacity(0.5),
-                    style: StrokeStyle(lineWidth: lineWidth * 1.6, lineCap: .round))
-            .rotationEffect(.degrees(-90))
-            .blur(radius: lineWidth * 0.5)
-    }
-
-    /// Overlap arc: solid color, rounded ends, on top of the shadow arc.
-    private var overArc: some View {
-        Circle()
-            .trim(from: 0, to: min(over, 0.9999))
-            .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-            .rotationEffect(.degrees(-90))
+    /// Position of the leading tip on the ring for a given arc fraction.
+    private func tipPoint(for fraction: Double, center: CGPoint, radius: CGFloat) -> CGPoint {
+        let angle = (-90 + fraction * 360) * .pi / 180
+        return CGPoint(x: center.x + radius * cos(angle),
+                       y: center.y + radius * sin(angle))
     }
 }
 
@@ -136,16 +215,18 @@ struct IPhoneRingView: View {
 #Preview("Rings") {
     ZStack {
         Color.black.ignoresSafeArea()
-        HStack(spacing: 32) {
+        VStack(spacing: 32) {
+            // Over-100% on all three rings — shows the stacked second lap + tip shadow.
             ThreeRingView(ringData: RingData(
-                moveRingPct: 1.56, exerciseRingPct: 3.1, standRingPct: 0.83,
+                moveRingPct: 1.45, exerciseRingPct: 1.7, standRingPct: 1.25,
                 stepsPct: 0, activeEnergyPct: 0, syncSource: .watch
-            ), size: 120)
+            ), size: 150)
 
-            IPhoneRingView(ringData: RingData(
-                moveRingPct: 0, exerciseRingPct: 0.9, standRingPct: 0,
-                stepsPct: 0.72, activeEnergyPct: 1.2, syncSource: .iphone
-            ), size: 120)
+            // Mixed: under, over, partial.
+            ThreeRingView(ringData: RingData(
+                moveRingPct: 0.6, exerciseRingPct: 1.35, standRingPct: 0.9,
+                stepsPct: 0, activeEnergyPct: 0, syncSource: .watch
+            ), size: 150)
         }
     }
 }

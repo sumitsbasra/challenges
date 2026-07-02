@@ -162,72 +162,45 @@ actor SyncCoordinator {
 
         for day in daysToSync {
             async let stepsTask    = fetcher.steps(on: day)
-            async let energyTask   = fetcher.activeEnergy(on: day)
-            async let exerciseTask = fetcher.exerciseMinutes(on: day)
-            async let standTask    = fetcher.standHours(on: day)
             async let distanceTask = fetcher.distanceMeters(on: day)
-            let (stepsOpt, energyOpt, exerciseOpt, standOpt, distanceOpt) =
-                await (stepsTask, energyTask, exerciseTask, standTask, distanceTask)
-
-            // A nil from a fetcher means HealthKit errored (not a genuine zero).
-            // For a *past* day being backfilled, if every metric failed to read,
-            // skip it rather than persisting a bogus 0 that would stick (past days
-            // with pts > 0 are never re-synced). Today always re-syncs, so a transient
-            // failure there self-heals on the next sync.
-            let allFailed = stepsOpt == nil && energyOpt == nil
-                && exerciseOpt == nil && standOpt == nil
-            if allFailed && !calendar.isDateInToday(day) { continue }
-
-            let steps    = stepsOpt    ?? 0
-            let energy   = energyOpt   ?? 0
-            let exercise = exerciseOpt ?? 0
-            let stand    = standOpt    ?? 0
-            let distance = distanceOpt ?? 0
+            let stepsOpt = await stepsTask
+            let steps    = stepsOpt ?? 0
+            let distance = await distanceTask ?? 0
 
             var points: Double
             var ringData: RingData
             if hasWatch {
-                // For past days, also try HKActivitySummary — it stores the Watch's
-                // consolidated daily record and often has data when individual samples
-                // haven't yet synced from Watch to iPhone (e.g. after a restore or
-                // re-install). It also carries the personalized move goal for that
-                // specific historical day, which may differ from today's goal.
-                let isPastDay = !calendar.isDateInToday(day)
-                let summaryEnergy:   Double
-                let summaryExercise: Double
-                let summaryStand:    Double
-                let summaryMoveGoal: Double
-
-                if isPastDay, let summary = await fetcher.activitySummary(on: day) {
-                    summaryEnergy   = summary.activeEnergyBurned.doubleValue(for: .kilocalorie())
-                    summaryExercise = summary.appleExerciseTime.doubleValue(for: .minute())
-                    summaryStand    = summary.appleStandHours.doubleValue(for: .count())
-                    summaryMoveGoal = summary.activeEnergyBurnedGoal.doubleValue(for: .kilocalorie())
-                } else {
-                    summaryEnergy   = 0
-                    summaryExercise = 0
-                    summaryStand    = 0
-                    summaryMoveGoal = 0
+                // Watch rings come from Apple's consolidated HKActivitySummary — exactly
+                // what the Fitness app shows, and the same source the home + challenge
+                // cards use, so the score always matches the rings. The summary also
+                // carries that day's personalized ring goals. Individual sample queries
+                // are used only as a fallback before the day's summary has synced.
+                guard let m = await fetcher.watchRingMetrics(on: day, fallbackMoveGoal: moveGoal) else {
+                    // No summary and every individual query errored — skip rather than
+                    // persist a bogus 0 (today self-heals on the next sync).
+                    continue
                 }
-
-                // Prefer individual-query values; fall back to summary when individual is 0.
-                // Individual queries are more real-time for today; summaries are more
-                // reliable for historical days where samples may not have synced yet.
-                let effectiveEnergy   = energy   > 0 ? energy   : summaryEnergy
-                let effectiveExercise = exercise > 0 ? exercise : summaryExercise
-                let effectiveStand    = stand    > 0 ? stand    : summaryStand
-                let effectiveMoveGoal = summaryMoveGoal > 0 ? summaryMoveGoal : moveGoal
-
                 (points, ringData) = PointsCalculator.calculateWatch(
-                    moveCalories: effectiveEnergy, moveGoal: effectiveMoveGoal,
-                    exerciseMinutes: effectiveExercise,
-                    standHours: effectiveStand
+                    moveCalories: m.moveCalories, moveGoal: m.moveGoal,
+                    exerciseMinutes: m.exerciseMinutes, exerciseGoal: m.exerciseGoal,
+                    standHours: m.standHours, standGoal: m.standGoal
                 )
             } else {
+                async let energyTask   = fetcher.activeEnergy(on: day)
+                async let exerciseTask = fetcher.exerciseMinutes(on: day)
+                let (energyOpt, exerciseOpt) = await (energyTask, exerciseTask)
+
+                // A nil from a fetcher means HealthKit errored (not a genuine zero).
+                // For a *past* day being backfilled, if every metric failed to read,
+                // skip it rather than persisting a bogus 0 that would stick (past days
+                // with pts > 0 are never re-synced). Today always re-syncs and self-heals.
+                let allFailed = stepsOpt == nil && energyOpt == nil && exerciseOpt == nil
+                if allFailed && !calendar.isDateInToday(day) { continue }
+
                 (points, ringData) = PointsCalculator.calculateNonWatch(
                     steps: steps, stepsGoal: goalResolver.stepsGoal,
-                    activeEnergy: energy, activeEnergyGoal: goalResolver.activeEnergyGoal,
-                    exerciseMinutes: exercise
+                    activeEnergy: energyOpt ?? 0, activeEnergyGoal: goalResolver.activeEnergyGoal,
+                    exerciseMinutes: exerciseOpt ?? 0
                 )
             }
             ringData.totalSteps     = steps

@@ -1,6 +1,19 @@
 import Foundation
 import HealthKit
 
+/// Effective Move/Exercise/Stand metrics (and each ring's goal) for one day.
+struct WatchRingMetrics {
+    var moveCalories: Double
+    var moveGoal: Double
+    var exerciseMinutes: Double
+    var exerciseGoal: Double
+    var standHours: Double
+    var standGoal: Double
+    /// True when these came from individual sample queries because the day's
+    /// consolidated activity summary hadn't synced yet.
+    var fromFallback: Bool
+}
+
 /// Fetches daily activity data from HealthKit for a given date range.
 actor ActivityDataFetcher {
 
@@ -45,6 +58,40 @@ actor ActivityDataFetcher {
     func activitySummary(on date: Date) async -> HKActivitySummary? {
         let summaries = await activitySummaries(from: date, to: date)
         return summaries[Calendar.current.startOfDay(for: date)]
+    }
+
+    /// Move/Exercise/Stand for a day, preferring Apple's consolidated HKActivitySummary
+    /// (exactly what the Fitness app shows, including that day's personalized ring goals)
+    /// and falling back to individual sample queries only when the summary hasn't synced
+    /// yet. This is the single source of truth for Watch rings across the app.
+    ///
+    /// Returns nil only when there's no summary AND every individual query errored, so
+    /// callers can avoid persisting/showing a bogus zero.
+    func watchRingMetrics(on date: Date, fallbackMoveGoal: Double) async -> WatchRingMetrics? {
+        if let summary = await activitySummary(on: date) {
+            return WatchRingMetrics(
+                moveCalories:    summary.activeEnergyBurned.doubleValue(for: .kilocalorie()),
+                moveGoal:        max(summary.activeEnergyBurnedGoal.doubleValue(for: .kilocalorie()), 1),
+                exerciseMinutes: summary.appleExerciseTime.doubleValue(for: .minute()),
+                exerciseGoal:    max(summary.appleExerciseTimeGoal.doubleValue(for: .minute()), 1),
+                standHours:      summary.appleStandHours.doubleValue(for: .count()),
+                standGoal:       max(summary.appleStandHoursGoal.doubleValue(for: .count()), 1),
+                fromFallback:    false
+            )
+        }
+
+        async let energyTask   = activeEnergy(on: date)
+        async let exerciseTask = exerciseMinutes(on: date)
+        async let standTask    = standHours(on: date)
+        let (energy, exercise, stand) = await (energyTask, exerciseTask, standTask)
+        if energy == nil && exercise == nil && stand == nil { return nil }
+
+        return WatchRingMetrics(
+            moveCalories:    energy   ?? 0, moveGoal:     max(fallbackMoveGoal, 1),
+            exerciseMinutes: exercise ?? 0, exerciseGoal: 30,
+            standHours:      stand    ?? 0, standGoal:    12,
+            fromFallback:    true
+        )
     }
 
     // MARK: - Steps

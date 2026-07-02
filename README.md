@@ -45,7 +45,7 @@ A single over-achieved ring can reach the cap on its own, just like Apple. Scori
 - **Workout list** — each device syncs its own HealthKit workout summaries (type, duration, energy, distance) to CloudKit, so any participant's detail sheet shows the activities they logged
 - **Today's activity card** — Apple Fitness-style ring stack with Move/Exercise/Stand (Watch) or Steps/Exercise/Energy (iPhone) metrics; respects user's units preference (Imperial/Metric) for distance
 - **Instant home screen** — cache pre-populated before first SwiftUI frame so challenges appear immediately on every launch with no blank flash
-- **Watch ring fallback** — if the activity summary hasn't synced yet (common early morning), falls back to individual HealthKit queries so rings are never stuck at zero
+- **Apple-exact rings** — Watch rings everywhere (home card, challenge card, and the scoring engine) come from Apple's consolidated `HKActivitySummary` via one shared helper, so Move/Exercise/Stand and the points match the Fitness app — and each other — exactly; individual sample queries are used only as a fallback before the day's summary has synced
 - **Profile photos** — avatar with crop/zoom, cached locally, synced to CloudKit
 - **Units preference** — Imperial/Metric toggle in Profile; distance displayed in chosen units everywhere
 - **Siri & Shortcuts** — "What's my rank in [challenge]?" returns a spoken result without opening the app; works with Apple Intelligence natural language on iOS 18.1+

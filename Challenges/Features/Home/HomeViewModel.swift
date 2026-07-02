@@ -97,52 +97,25 @@ final class HomeViewModel {
 
         let fetcher = ActivityDataFetcher()
         let today = Date()
-        let calendar = Calendar.current
 
         if hasWatch {
-            let summaries = await fetcher.activitySummaries(from: today, to: today)
-            let key = calendar.startOfDay(for: today)
-            if let summary = summaries[key] {
-                let moveGoal  = summary.activeEnergyBurnedGoal.doubleValue(for: .kilocalorie())
-                let moveDone  = summary.activeEnergyBurned.doubleValue(for: .kilocalorie())
-                let exGoal    = summary.appleExerciseTimeGoal.doubleValue(for: .minute())
-                let exDone    = summary.appleExerciseTime.doubleValue(for: .minute())
-                let standGoal = summary.appleStandHoursGoal.doubleValue(for: .count())
-                let standDone = summary.appleStandHours.doubleValue(for: .count())
-
-                activeEnergy    = moveDone
-                exerciseMinutes = exDone
-                standHours      = standDone
-                self.moveGoal     = max(moveGoal, 1)
-                self.exerciseGoal = max(exGoal, 1)
-                self.standGoal    = max(standGoal, 1)
+            // Read today's rings from Apple's consolidated activity summary — the SAME
+            // source the scoring engine (SyncCoordinator) and the challenge detail card
+            // now use — so the home rings, the challenge rings, and the points all match
+            // the Fitness app exactly. Falls back to individual queries only before the
+            // day's first summary syncs. Leaves prior data intact if nothing is readable.
+            let goalMoveVal = await GoalResolver().moveGoal()
+            if let m = await fetcher.watchRingMetrics(on: today, fallbackMoveGoal: goalMoveVal) {
+                activeEnergy    = m.moveCalories
+                exerciseMinutes = m.exerciseMinutes
+                standHours      = m.standHours
+                self.moveGoal     = m.moveGoal
+                self.exerciseGoal = m.exerciseGoal
+                self.standGoal    = m.standGoal
                 ringData = RingData(
-                    moveRingPct:     moveGoal  > 0 ? moveDone  / moveGoal  : 0,
-                    exerciseRingPct: exGoal    > 0 ? exDone    / exGoal    : 0,
-                    standRingPct:    standGoal > 0 ? standDone / standGoal : 0,
-                    stepsPct: 0, activeEnergyPct: 0,
-                    syncSource: .watch
-                )
-            } else {
-                // Activity summary not yet available for today (common early in the morning
-                // before the first workout event triggers a Watch sync). Fall back to
-                // individual HealthKit queries, which are populated even without a summary.
-                async let energyTask   = fetcher.activeEnergy(on: today)
-                async let exerciseTask = fetcher.exerciseMinutes(on: today)
-                async let standTask    = fetcher.standHours(on: today)
-                let (e, ex, st) = await (energyTask ?? 0, exerciseTask ?? 0, standTask ?? 0)
-
-                let goalMoveVal = await GoalResolver().moveGoal()
-                activeEnergy    = e
-                exerciseMinutes = ex
-                standHours      = st
-                self.moveGoal     = max(goalMoveVal, 1)
-                self.exerciseGoal = 30
-                self.standGoal    = 12
-                ringData = RingData(
-                    moveRingPct:     goalMoveVal > 0 ? e  / goalMoveVal : 0,
-                    exerciseRingPct: ex / 30,
-                    standRingPct:    st / 12,
+                    moveRingPct:     m.moveCalories    / m.moveGoal,
+                    exerciseRingPct: m.exerciseMinutes / m.exerciseGoal,
+                    standRingPct:    m.standHours      / m.standGoal,
                     stepsPct: 0, activeEnergyPct: 0,
                     syncSource: .watch
                 )

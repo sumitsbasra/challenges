@@ -275,30 +275,32 @@ final class ChallengeDetailViewModel {
         let today    = Date()
         let cal      = Calendar.current
 
-        // Read all metrics via individual HKStatisticsQuery / HKSampleQuery calls.
-        // The Watch writes both individual samples and consolidated summaries to HealthKit;
-        // individual samples sync within minutes, so we get live data immediately without
-        // waiting for the Watch to push its end-of-day consolidated summary.
+        // Prefer Apple's consolidated activity summary for Watch rings (matches the Fitness
+        // app and the home card exactly); fall back to individual queries only before the
+        // day's summary syncs. Steps + distance always come from individual queries.
         let goalResolver = GoalResolver()
         async let stepsTask    = fetcher.steps(on: today)
-        async let energyTask   = fetcher.activeEnergy(on: today)
-        async let exerciseTask = fetcher.exerciseMinutes(on: today)
-        async let standTask    = fetcher.standHours(on: today)
         async let distanceTask = fetcher.distanceMeters(on: today)
-        let (steps, energy, exercise, stand, distance) =
-            await (stepsTask ?? 0, energyTask ?? 0, exerciseTask ?? 0, standTask ?? 0, distanceTask ?? 0)
+        let steps    = await stepsTask ?? 0
+        let distance = await distanceTask ?? 0
 
         var updatedRingData: RingData
         var points: Double
 
         if hasWatch {
             let moveGoal = await goalResolver.moveGoal()
+            guard let m = await fetcher.watchRingMetrics(on: today, fallbackMoveGoal: moveGoal) else {
+                return  // nothing readable yet — don't clobber existing data with zeros
+            }
             (points, updatedRingData) = PointsCalculator.calculateWatch(
-                moveCalories: energy, moveGoal: moveGoal,
-                exerciseMinutes: exercise,
-                standHours: stand
+                moveCalories: m.moveCalories, moveGoal: m.moveGoal,
+                exerciseMinutes: m.exerciseMinutes, exerciseGoal: m.exerciseGoal,
+                standHours: m.standHours, standGoal: m.standGoal
             )
         } else {
+            async let energyTask   = fetcher.activeEnergy(on: today)
+            async let exerciseTask = fetcher.exerciseMinutes(on: today)
+            let (energy, exercise) = await (energyTask ?? 0, exerciseTask ?? 0)
             (points, updatedRingData) = PointsCalculator.calculateNonWatch(
                 steps: steps, stepsGoal: goalResolver.stepsGoal,
                 activeEnergy: energy, activeEnergyGoal: goalResolver.activeEnergyGoal,

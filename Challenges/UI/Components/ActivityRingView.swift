@@ -43,7 +43,14 @@ struct ActivityRingView: View {
     @State private var animatedProgress: Double = 0
 
     private var capped: Double { min(animatedProgress, 1.0) }
-    private var over:   Double { min(max(animatedProgress - 1.0, 0), 0.9999) }
+
+    /// How far the ring has gone past 100% (the second lap). Once the ring is full we keep
+    /// a small minimum overlap so the leading tip covers the 12 o'clock join — otherwise a
+    /// full ring's gradient collides there and shows a hard flat edge.
+    private var over: Double {
+        guard animatedProgress >= 1.0 else { return 0 }
+        return min(max(animatedProgress - 1.0, 0.04), 0.9999)
+    }
 
     /// Color at the 12 o'clock wrap point — the shade where the first lap ends and the
     /// second lap begins. Making both laps meet at this exact shade keeps the wrap
@@ -93,16 +100,18 @@ struct ActivityRingView: View {
                 // Second lap (over 100%), stacked on top. Its start cap at 12 matches the
                 // lap below (wrapShade), so the start stays seamless.
                 if over > 0 {
-                    // Soft shadow under the leading tip, offset downward (global top light),
-                    // drawn BENEATH the second lap so only the part below the tip shows.
-                    // It's a dark blur, not a bright shape, so nothing reads as a circle;
-                    // and being tip-local, the start at 12 stays clean.
+                    // Soft shadow just AHEAD of the leading tip (along the direction of
+                    // travel), drawn BENEATH the second lap. "Ahead" is always the exposed
+                    // first-lap surface the second lap hasn't reached yet, so the shadow is
+                    // visible for every tip position — a fixed downward offset would slip
+                    // under the lap when the tip is on the left. It's a dark blur, not a
+                    // bright shape, so nothing reads as a circle, and the start stays clean.
                     Circle()
                         .fill(Color.black.opacity(0.7))
                         .frame(width: lineWidth * 0.9, height: lineWidth * 0.9)
                         .blur(radius: lineWidth * 0.14)
-                        .position(tipPoint(for: over, center: center, radius: radius))
-                        .offset(y: lineWidth * 0.24)
+                        .position(tipShadowCenter(for: over, center: center, radius: radius,
+                                                  ahead: lineWidth * 0.28))
 
                     Circle()
                         .trim(from: 0, to: over)
@@ -146,11 +155,17 @@ struct ActivityRingView: View {
         }
     }
 
-    /// Position of the leading tip on the ring for a given arc fraction.
-    private func tipPoint(for fraction: Double, center: CGPoint, radius: CGFloat) -> CGPoint {
+    /// The leading tip position nudged `ahead` points along the clockwise direction of
+    /// travel — where the second lap hasn't yet covered the first lap, so a shadow placed
+    /// here is always visible regardless of where the tip sits on the ring.
+    private func tipShadowCenter(for fraction: Double, center: CGPoint, radius: CGFloat, ahead: CGFloat) -> CGPoint {
         let angle = (-90 + fraction * 360) * .pi / 180
-        return CGPoint(x: center.x + radius * cos(angle),
-                       y: center.y + radius * sin(angle))
+        let tip = CGPoint(x: center.x + radius * cos(angle),
+                          y: center.y + radius * sin(angle))
+        // Clockwise tangent (direction of travel) in screen space (y points down).
+        let tangent = (dx: -sin(angle), dy: cos(angle))
+        return CGPoint(x: tip.x + ahead * tangent.dx,
+                       y: tip.y + ahead * tangent.dy)
     }
 }
 

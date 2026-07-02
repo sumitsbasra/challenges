@@ -179,8 +179,11 @@ final class HomeViewModel {
             async let activeBuild   = buildRankedItems(from: all, status: .active,    userID: userID)
             async let completedBuild = buildRankedItems(from: all, status: .completed, userID: userID)
             let (activeResult, completedResult) = await (activeBuild, completedBuild)
-            let active    = activeResult.items
-            let completed = completedResult.items
+            // Never let an incomplete fetch (CloudKit index lag, a per-challenge fetch
+            // error, or a not-yet-queryable participation) zero out points we already
+            // knew — scores never actually disappear. Carry forward the last-known values.
+            let active    = mergePreservingPoints(fresh: activeResult.items,    previous: activeItems)
+            let completed = mergePreservingPoints(fresh: completedResult.items, previous: completedItems)
             let seenIDs   = Set([userID])
                 .union(activeResult.participantIDs)
                 .union(completedResult.participantIDs)
@@ -367,6 +370,29 @@ final class HomeViewModel {
     }
 
     @MainActor
+    /// Merges freshly-built cards with the ones already on screen (cached or from the
+    /// previous fetch), refusing to let a card's `totalPoints` regress from a known value
+    /// down to 0. A fresh card only shows 0 when CloudKit returned nothing for it (index
+    /// lag, a per-challenge fetch error, or a participation record that isn't queryable
+    /// yet) — real scores never vanish — so in that case we keep the last-known points,
+    /// rank, and participant count instead of clobbering (and persisting) a bogus zero.
+    private func mergePreservingPoints(fresh: [TodayItem], previous: [TodayItem]) -> [TodayItem] {
+        let prevByID = Dictionary(previous.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return fresh.map { item in
+            guard let prev = prevByID[item.id], item.totalPoints == 0, prev.totalPoints > 0 else {
+                return item
+            }
+            return TodayItem(
+                id: item.id,
+                challenge: item.challenge,   // keep fresh challenge metadata (title/dates/status)
+                rank: prev.rank,
+                participantCount: max(item.participantCount, prev.participantCount),
+                todayPoints: prev.todayPoints,
+                totalPoints: prev.totalPoints
+            )
+        }
+    }
+
     private func buildRankedItems(from all: [Challenge], status: ChallengeStatus,
                                   userID: String) async -> (items: [TodayItem], participantIDs: Set<String>) {
         let challenges = all.filter { $0.status == status }

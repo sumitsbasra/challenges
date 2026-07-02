@@ -200,22 +200,34 @@ final class ChallengeDetailViewModel {
         do {
             var parts = try await ck.fetchParticipations(challengeID: challenge.id)
 
+            // fetchParticipations returns records WITHOUT their dailyScores (scores are a
+            // separate record type). Carry forward the scores we already have in memory/
+            // cache for every participant so nobody's points drop to 0 in the window before
+            // loadLeaderboard refreshes everyone — real scores never disappear.
+            let priorScores = Dictionary(participations.map { ($0.id, $0.dailyScores) },
+                                         uniquingKeysWith: { first, _ in first })
+            for i in parts.indices {
+                if let prev = priorScores[parts[i].id], !prev.isEmpty {
+                    parts[i].dailyScores = prev
+                }
+            }
+
             let userID = UserSession.shared.userID ?? ""
             if let myPart = parts.first(where: { $0.user.id == userID }),
                let idx = parts.firstIndex(where: { $0.id == myPart.id }) {
-                // Start with what CloudKit returned.
-                var myScores = (try? await ck.fetchDailyScores(participationID: myPart.id)) ?? []
-
-                // Merge with scores returned directly from the sync. These were computed
-                // from HealthKit immediately before this fetch, so they are authoritative
-                // for any day they cover. CloudKit eventual consistency means the fetch
-                // above may not yet see records that were just saved — the direct sync
-                // results fill that gap.
-                for score in syncedScores {
+                // Start from the carried-forward scores, then overlay freshly fetched and
+                // freshly synced scores. The sync results were computed from HealthKit
+                // immediately before this fetch, so they're authoritative for any day they
+                // cover (CloudKit eventual consistency means the fetch may not see records
+                // that were just saved). Each fresh score replaces that day; days only in
+                // the carried-forward set are preserved rather than lost.
+                var myScores = parts[idx].dailyScores
+                let fetched = (try? await ck.fetchDailyScores(participationID: myPart.id)) ?? []
+                for score in fetched + syncedScores {
                     if let existing = myScores.firstIndex(where: {
                         Calendar.current.isDate($0.date, inSameDayAs: score.date)
                     }) {
-                        myScores[existing] = score  // prefer freshly computed
+                        myScores[existing] = score  // prefer freshly fetched / computed
                     } else {
                         myScores.append(score)
                     }
@@ -351,8 +363,17 @@ final class ChallengeDetailViewModel {
 
     @MainActor
     private func silentParticipationRefresh() async {
-        guard let parts = try? await ck.fetchParticipations(challengeID: challenge.id),
+        guard var parts = try? await ck.fetchParticipations(challengeID: challenge.id),
               !parts.isEmpty else { return }
+        // Carry forward existing scores — fetchParticipations returns no dailyScores, so
+        // assigning raw would zero everyone's points until the leaderboard reloads.
+        let priorScores = Dictionary(participations.map { ($0.id, $0.dailyScores) },
+                                     uniquingKeysWith: { first, _ in first })
+        for i in parts.indices {
+            if let prev = priorScores[parts[i].id], !prev.isEmpty {
+                parts[i].dailyScores = prev
+            }
+        }
         let userID = UserSession.shared.userID ?? ""
         // Only update if we now have a real record for ourselves
         if parts.contains(where: { $0.user.id == userID }) {
@@ -397,7 +418,10 @@ final class ChallengeDetailViewModel {
                         if !alreadyHave { merged.append(ckScore) }
                     }
                     participations[i].dailyScores = merged.sorted { $0.date < $1.date }
-                } else {
+                } else if !ckScores.isEmpty {
+                    // Only replace when the fetch actually returned this participant's
+                    // scores; an empty result (index lag or a partial fetch) must not zero
+                    // out points we already have cached for them.
                     participations[i].dailyScores = ckScores
                 }
             }

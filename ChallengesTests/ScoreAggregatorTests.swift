@@ -113,6 +113,46 @@ final class ScoreAggregatorTests: XCTestCase {
         XCTAssertNil(ScoreAggregator.rank(of: "nobody", in: parts))
     }
 
+    // MARK: - Timezone handling
+
+    private func calendar(_ zoneID: String) -> Calendar {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: zoneID)!
+        return cal
+    }
+
+    func testTodayScoreCountsInTimezonesAheadOfUTC() {
+        // At UTC+12 and beyond, noon UTC of the local day is already the next local
+        // day. Bucketing with the viewer's local calendar used to drop today's score
+        // as "future-dated" for those users.
+        for zoneID in ["Pacific/Auckland", "Pacific/Kiritimati", "Pacific/Pago_Pago", "UTC"] {
+            let cal = calendar(zoneID)
+            let todayNoonUTC = DailyScore.noonUTC(for: Date(), localCalendar: cal)
+            var parts = [participation(id: "p1", userID: "u1", joinedAt: day(-1), scores: [
+                score(participationID: "p1", date: todayNoonUTC, points: 250),
+            ])]
+            ScoreAggregator.aggregate(&parts, localCalendar: cal)
+            XCTAssertEqual(parts[0].totalPoints, 250, accuracy: 0.0001,
+                           "today's score dropped for viewer in \(zoneID)")
+        }
+    }
+
+    func testScoreFromParticipantOneDayAheadIsIncluded() {
+        // A participant in a timezone ahead of the viewer legitimately has a score
+        // for the viewer's tomorrow — that must count. Two days ahead is bogus.
+        let viewerCal = calendar("Pacific/Pago_Pago") // UTC−11, furthest behind
+        let now = Date()
+        let tomorrow = viewerCal.date(byAdding: .day, value: 1, to: now)!
+        let dayAfter = viewerCal.date(byAdding: .day, value: 2, to: now)!
+        var parts = [participation(id: "p1", userID: "u1", joinedAt: day(-1), scores: [
+            score(participationID: "p1", date: DailyScore.noonUTC(for: tomorrow, localCalendar: viewerCal), points: 300),
+            score(participationID: "p1", date: DailyScore.noonUTC(for: dayAfter, localCalendar: viewerCal), points: 999),
+        ])]
+        ScoreAggregator.aggregate(&parts, localCalendar: viewerCal)
+        XCTAssertEqual(parts[0].totalPoints, 300, accuracy: 0.0001,
+                       "one-day-ahead score must count; two-day-ahead must not")
+    }
+
     func testRankedDoesNotMutateInput() {
         let parts = [
             participation(id: "p1", userID: "u1", joinedAt: day(-3),

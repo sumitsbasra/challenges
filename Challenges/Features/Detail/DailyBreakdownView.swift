@@ -16,7 +16,7 @@ struct DailyBreakdownView: View {
         return (0..<count).map { offset in
             let day = cal.date(byAdding: .day, value: offset, to: start) ?? start
             let score = participation.dailyScores.first {
-                cal.isDate($0.date, inSameDayAs: day)
+                $0.isFor(localDay: day)
             }
             return (day, score)
         }

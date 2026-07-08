@@ -298,17 +298,16 @@ final class HomeViewModel {
     /// stale "+0 today" values caused by CloudKit read-after-write latency.
     @MainActor
     func applySyncedScores(_ syncedScores: [String: [DailyScore]]) {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
+        let maxDay = DailyScore.day(of: DailyScore.noonUTC(for: Date())).addingTimeInterval(86_400)
         activeItems = activeItems.map { item in
             guard let scores = syncedScores[item.id] else { return item }
             let todayPts = scores
-                .first(where: { cal.isDateInToday($0.date) })?.points ?? item.todayPoints
+                .first(where: \.isForToday)?.points ?? item.todayPoints
             // Recompute total from the full merged score set (deduped by day).
             var best: [Date: Double] = [:]
             for score in scores {
-                let day = cal.startOfDay(for: score.date)
-                guard day <= today else { continue }
+                let day = DailyScore.day(of: score.date)
+                guard day <= maxDay else { continue }
                 best[day] = max(best[day] ?? 0, score.points)
             }
             let totalPts = best.values.reduce(0, +)
@@ -432,7 +431,7 @@ final class HomeViewModel {
                 }
 
                 let todayPts = mine.dailyScores
-                    .first(where: { Calendar.current.isDateInToday($0.date) })?.points ?? 0
+                    .first(where: \.isForToday)?.points ?? 0
 
                 items.append(TodayItem(
                     id:               challenge.id,

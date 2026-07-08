@@ -43,6 +43,16 @@ extension Challenge {
             to: calendar.startOfDay(for: startDate)).day ?? 0)
     }
 
+    /// Whole calendar days from `now` until the challenge ends (clamped at 0).
+    /// Single source of truth for the detail header, home rows, and widget.
+    /// Start-of-day normalization on both sides keeps the value stable across
+    /// times of day and DST transitions.
+    func daysRemaining(now: Date = Date(), calendar: Calendar = .current) -> Int {
+        max(0, calendar.dateComponents([.day],
+            from: calendar.startOfDay(for: now),
+            to: calendar.startOfDay(for: endDate)).day ?? 0)
+    }
+
     /// "Starts today" / "Starts tomorrow" / "Starts in N days" for a pending challenge.
     /// Single source of truth so the home row badge and the detail header never drift.
     func startCountdownText(now: Date = Date(), calendar: Calendar = .current) -> String {

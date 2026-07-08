@@ -4,18 +4,21 @@ import Foundation
 enum ScoreAggregator {
 
     /// Mutates `participations` in-place: sums totalPoints and assigns rank.
-    static func aggregate(_ participations: inout [Participation]) {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
+    static func aggregate(_ participations: inout [Participation], localCalendar: Calendar = .current) {
+        // Score dates are noon UTC encoding the scorer's local day, so bucket in UTC.
+        // Allow one day beyond the viewer's local today: participants in timezones
+        // ahead of the viewer legitimately have scores for the viewer's "tomorrow".
+        let localToday = DailyScore.day(of: DailyScore.noonUTC(for: Date(), localCalendar: localCalendar))
+        let maxDay = localToday.addingTimeInterval(86_400)
         for i in participations.indices {
             // Deduplicate by calendar day, keeping the highest-scoring record per day.
             // Duplicate CloudKit records can accumulate from save retries (e.g. the
             // .allKeys save policy used in saveParticipation), which would otherwise
-            // inflate point totals. Also excludes future-dated scores from UTC skew.
+            // inflate point totals. Also excludes bogus far-future-dated scores.
             var best: [Date: Double] = [:]
             for score in participations[i].dailyScores {
-                let day = cal.startOfDay(for: score.date)
-                guard day <= today else { continue }
+                let day = DailyScore.day(of: score.date)
+                guard day <= maxDay else { continue }
                 best[day] = max(best[day] ?? 0, score.points)
             }
             participations[i].totalPoints = best.values.reduce(0, +)

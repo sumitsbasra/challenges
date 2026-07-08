@@ -16,9 +16,9 @@ struct MyProgressView: View {
     private var rings: RingData { todayScore?.ringData ?? emptyRingData }
 
     private var todayScore: DailyScore? {
-        participation.dailyScores.last {
-            Calendar.current.isDate($0.date, inSameDayAs: Date())
-        }
+        participation.dailyScores
+            .filter(\.isForToday)
+            .max { $0.points < $1.points }
     }
 
     var body: some View {
@@ -184,9 +184,10 @@ struct PointsCardView: View {
     let participation: Participation
 
     private var todayPoints: Double {
-        participation.dailyScores.last {
-            Calendar.current.isDate($0.date, inSameDayAs: Date())
-        }?.points ?? 0
+        participation.dailyScores
+            .filter(\.isForToday)
+            .map(\.points)
+            .max() ?? 0
     }
 
     var body: some View {

@@ -11,10 +11,7 @@ struct TodayItem: Identifiable, Codable {
     let totalPoints: Double
 
     var daysRemaining: Int {
-        let cal = Calendar.current
-        return max(0, cal.dateComponents([.day],
-            from: cal.startOfDay(for: Date()),
-            to:   cal.startOfDay(for: challenge.endDate)).day ?? 0)
+        challenge.daysRemaining()
     }
 
     var daysRemainingText: String {

@@ -97,9 +97,18 @@ struct ActivityRingView: View {
                     .stroke(firstLapGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
 
-                // Second lap (over 100%), stacked on top. Its start cap at 12 matches the
-                // lap below (wrapShade), so the start stays seamless.
+                // Second lap (over 100%), stacked on top.
                 if over > 0 {
+                    // The first lap's angular gradient wraps hard at 12 o'clock (base
+                    // shade meets wrapShade), and the second lap's antialiased start edge
+                    // lets a hairline of that dark wrap bleed through. A short solid arc
+                    // in the shared wrap shade straddles 12 o'clock beneath the seam so
+                    // both sides of the butt edge sit on identical paint.
+                    Circle()
+                        .trim(from: 0, to: 0.016)
+                        .stroke(wrapShade, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+                        .rotationEffect(.degrees(-90 - 0.008 * 360))
+
                     // Soft shadow just AHEAD of the leading tip (along the direction of
                     // travel), drawn BENEATH the second lap. "Ahead" is always the exposed
                     // first-lap surface the second lap hasn't reached yet, so the shadow is
@@ -110,13 +119,24 @@ struct ActivityRingView: View {
                         .fill(Color.black.opacity(0.7))
                         .frame(width: lineWidth * 0.9, height: lineWidth * 0.9)
                         .blur(radius: lineWidth * 0.14)
-                        .position(tipShadowCenter(for: over, center: center, radius: radius,
-                                                  ahead: lineWidth * 0.28))
+                        .position(tipPoint(for: over, center: center, radius: radius,
+                                           ahead: lineWidth * 0.28))
 
+                    // Butt start cap: a round cap would protrude half a line-width
+                    // BACKWARDS past 12 o'clock onto the exposed first lap, and its curved
+                    // silhouette shows against the tip shadow once the tip gets close to
+                    // the start (progress near 200%). A butt edge lands exactly on the
+                    // 12 o'clock join, where both laps are the same shade — invisible.
                     Circle()
                         .trim(from: 0, to: over)
-                        .stroke(secondLapGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                        .stroke(secondLapGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
                         .rotationEffect(.degrees(-90))
+
+                    // Rounded leading tip, restored as a dot over the butt end.
+                    Circle()
+                        .fill(color.ringLeadingShade)
+                        .frame(width: lineWidth, height: lineWidth)
+                        .position(tipPoint(for: over, center: center, radius: radius, ahead: 0))
                 }
 
                 // Cross-width sheen: a whisper of convex shading so the band reads as a
@@ -155,10 +175,10 @@ struct ActivityRingView: View {
         }
     }
 
-    /// The leading tip position nudged `ahead` points along the clockwise direction of
-    /// travel — where the second lap hasn't yet covered the first lap, so a shadow placed
-    /// here is always visible regardless of where the tip sits on the ring.
-    private func tipShadowCenter(for fraction: Double, center: CGPoint, radius: CGFloat, ahead: CGFloat) -> CGPoint {
+    /// The leading tip position, optionally nudged `ahead` points along the clockwise
+    /// direction of travel (used to place the tip shadow on the exposed first-lap surface
+    /// the second lap hasn't reached yet; `ahead: 0` is the tip itself).
+    private func tipPoint(for fraction: Double, center: CGPoint, radius: CGFloat, ahead: CGFloat) -> CGPoint {
         let angle = (-90 + fraction * 360) * .pi / 180
         let tip = CGPoint(x: center.x + radius * cos(angle),
                           y: center.y + radius * sin(angle))

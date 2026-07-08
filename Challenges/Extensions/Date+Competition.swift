@@ -10,16 +10,4 @@ extension Date {
         return Calendar.current.date(byAdding: .second, value: -1, to: tomorrow) ?? tomorrow
     }
 
-    /// True if this date is within the competition window [start, end].
-    func isInCompetition(start: Date, end: Date) -> Bool {
-        self >= start.startOfDay && self <= end.endOfDay
-    }
-
-    /// Returns a relative label like "Day 3 of 7" given a competition start date.
-    func competitionDayLabel(startDate: Date, totalDays: Int = 7) -> String {
-        let cal = Calendar.current
-        let day = cal.dateComponents([.day], from: cal.startOfDay(for: startDate),
-                                     to: cal.startOfDay(for: self)).day ?? 0
-        return "Day \(day + 1) of \(totalDays)"
-    }
 }

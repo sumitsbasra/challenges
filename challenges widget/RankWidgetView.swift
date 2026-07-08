@@ -63,7 +63,7 @@ struct RankWidgetView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
-        .widgetURL(URL(string: "challenges://challenge/\(state.challengeID)")!)
+        .widgetURL(URL(string: "challenges://challenge/\(state.challengeID)"))
     }
 
     // MARK: - Placeholder / No Data

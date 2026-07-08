@@ -414,6 +414,34 @@ final class CloudKitManager: ObservableObject {
         return try await fetchAllRecords(matching: query).compactMap(RecordMapper.dailyScore)
     }
 
+    // MARK: - Reaction
+
+    /// Upsert a single reaction. Deterministic day-keyed recordNames mean re-sending
+    /// the same day updates the emoji instead of creating a duplicate.
+    func saveReaction(_ reaction: Reaction) async throws {
+        let record = RecordMapper.record(from: reaction)
+        let operation = CKModifyRecordsOperation(recordsToSave: [record], recordIDsToDelete: nil)
+        operation.savePolicy = .allKeys
+        operation.isAtomic = true
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            operation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success: continuation.resume()
+                case .failure(let error): continuation.resume(throwing: error)
+                }
+            }
+            publicDB.add(operation)
+        }
+    }
+
+    /// All reactions sent in a challenge (across participants).
+    func fetchReactions(challengeID: String) async throws -> [Reaction] {
+        let challengeRef = CKRecord.Reference(recordID: CKRecord.ID(recordName: challengeID), action: .none)
+        let predicate = NSPredicate(format: "challengeRef == %@", challengeRef)
+        let query = CKQuery(recordType: RecordMapper.RecordType.reaction, predicate: predicate)
+        return try await fetchAllRecords(matching: query).compactMap(RecordMapper.reaction)
+    }
+
     // MARK: - Retry Helper
 
     /// Runs a CloudKit operation with bounded retry on transient errors so a single
@@ -470,7 +498,9 @@ final class CloudKitManager: ObservableObject {
 
     // MARK: - CloudKit Subscriptions
 
-    func registerSubscriptions(forActiveChallengeIDs challengeIDs: [String]) async {
+    /// `challengeIDs` should include pending AND active challenges: score pushes only
+    /// matter once active, but join pushes matter most while a challenge is pending.
+    func registerSubscriptions(forChallengeIDs challengeIDs: [String]) async {
         guard !challengeIDs.isEmpty else { return }
 
         // Subscription 1: DailyScore updates for active challenges (leaderboard refresh)
@@ -506,8 +536,36 @@ final class CloudKitManager: ObservableObject {
         )
         participationSubscription.notificationInfo = makeNotificationInfo()
 
+        // Subscription 3: reactions sent to the current user. Fires on update too —
+        // day-keyed reaction IDs mean a re-send the same day is a record update.
+        let reactionPredicate = NSPredicate(format: "toUserRef == %@", userRef)
+        let reactionSubscription = CKQuerySubscription(
+            recordType: RecordMapper.RecordType.reaction,
+            predicate: reactionPredicate,
+            subscriptionID: "user-reactions",
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate]
+        )
+        let reactionInfo = makeNotificationInfo()
+        // Ship the display fields with the push so the handler can raise the local
+        // notification without a CloudKit round trip.
+        reactionInfo.desiredKeys = ["fromName", "emoji", "challengeTitle", "challengeRef"]
+        reactionSubscription.notificationInfo = reactionInfo
+
+        // Subscription 4: someone joining one of the user's challenges. Creation only —
+        // record updates fire for displayName backfills, which aren't joins.
+        let joinSubscription = CKQuerySubscription(
+            recordType: RecordMapper.RecordType.participation,
+            predicate: NSPredicate(format: "challengeRef IN %@", challengeRefs),
+            subscriptionID: "challenge-joins",
+            options: [.firesOnRecordCreation]
+        )
+        let joinInfo = makeNotificationInfo()
+        joinInfo.desiredKeys = ["displayName", "challengeRef", "userRef"]
+        joinSubscription.notificationInfo = joinInfo
+
         await registerSubscriptionsWithRetry(
-            subscriptions: [scoreSubscription, participationSubscription],
+            subscriptions: [scoreSubscription, participationSubscription,
+                            reactionSubscription, joinSubscription],
             attempt: 1
         )
     }

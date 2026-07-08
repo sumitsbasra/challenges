@@ -256,6 +256,9 @@ struct NotificationSettingsView: View {
     @AppStorage("notif.dailyUpdate")        private var dailyUpdate       = true
     @AppStorage("notif.challengeEnding")    private var challengeEnding   = true
     @AppStorage("notif.finalStandings")     private var finalStandings    = true
+    @AppStorage("notif.overtaken")          private var overtaken         = true
+    @AppStorage("notif.reactions")          private var reactions         = true
+    @AppStorage("notif.joins")              private var joins             = true
 
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var showDeniedAlert = false
@@ -265,6 +268,9 @@ struct NotificationSettingsView: View {
         (NotificationItem(id: "daily",    icon: "chart.bar.fill",   color: .standRing,         title: "Daily Update",         description: "Your leaderboard position each morning"),   $dailyUpdate),
         (NotificationItem(id: "ending",   icon: "timer",            color: .stepsColor,        title: "Challenge Ending",     description: "When a challenge ends in 24 hours"),        $challengeEnding),
         (NotificationItem(id: "final",    icon: "trophy.fill",      color: .activeEnergyColor, title: "Final Standings",      description: "Your result when a challenge completes"),   $finalStandings),
+        (NotificationItem(id: "overtake", icon: "figure.run",       color: .moveRing,          title: "Overtake Alerts",      description: "When someone passes you on the leaderboard"), $overtaken),
+        (NotificationItem(id: "reaction", icon: "hands.clap.fill",  color: .rankGold,          title: "Reactions",            description: "When a friend sends you a reaction"),        $reactions),
+        (NotificationItem(id: "join",     icon: "person.badge.plus", color: .standRing,        title: "Challenge Joins",      description: "When someone joins one of your challenges"), $joins),
     ]}
 
     var body: some View {

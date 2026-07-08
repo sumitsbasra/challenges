@@ -11,6 +11,13 @@ final class ChallengeDetailViewModel {
     var challenge: Challenge
     var participations: [Participation] = []
 
+    /// All reactions sent in this challenge, newest first.
+    var reactions: [Reaction] = []
+
+    /// Every participant's workouts — loaded once for completed challenges to power
+    /// the group totals card.
+    var challengeWorkouts: [WorkoutSummary] = []
+
     /// True while the initial participations + current-user scores are loading.
     var isLoading: Bool = false
     /// True while the full leaderboard scores are being fetched.
@@ -65,9 +72,8 @@ final class ChallengeDetailViewModel {
     }
 
     var daysRemaining: Int {
-        let now = Date()
         guard challenge.status == .active else { return 0 }
-        return max(0, Calendar.current.dateComponents([.day], from: now, to: challenge.endDate).day ?? 0)
+        return challenge.daysRemaining()
     }
 
     var countdownText: String {
@@ -137,7 +143,16 @@ final class ChallengeDetailViewModel {
         // not zeros (loadLeaderboard is otherwise only triggered by pull-to-refresh).
         await loadLeaderboard()
 
-        await CloudKitManager.shared.registerSubscriptions(forActiveChallengeIDs: [challenge.id])
+        // Register for ALL of the user's non-completed challenges, not just this one.
+        // The subscriptions share fixed IDs, so registering with a single challenge
+        // would clobber the home screen's multi-challenge predicate and silence score
+        // and join pushes for every other challenge until the next home load.
+        var subscribableIDs: Set<String> = [challenge.id]
+        if let userID = UserSession.shared.userID,
+           let cached = ChallengeCache.load(userID: userID) {
+            subscribableIDs.formUnion(cached.challenges.filter { $0.status != .completed }.map(\.id))
+        }
+        await CloudKitManager.shared.registerSubscriptions(forChallengeIDs: Array(subscribableIDs))
 
         // If we created this challenge but still aren't a participant, recover.
         let userID = UserSession.shared.userID ?? ""
@@ -225,7 +240,7 @@ final class ChallengeDetailViewModel {
                 let fetched = (try? await ck.fetchDailyScores(participationID: myPart.id)) ?? []
                 for score in fetched + syncedScores {
                     if let existing = myScores.firstIndex(where: {
-                        Calendar.current.isDate($0.date, inSameDayAs: score.date)
+                        DailyScore.day(of: $0.date) == DailyScore.day(of: score.date)
                     }) {
                         myScores[existing] = score  // prefer freshly fetched / computed
                     } else {
@@ -285,7 +300,6 @@ final class ChallengeDetailViewModel {
         let hasWatch = UserDefaults.standard.bool(forKey: "hasAppleWatch")
         let fetcher  = ActivityDataFetcher()
         let today    = Date()
-        let cal      = Calendar.current
 
         // Prefer Apple's consolidated activity summary for Watch rings (matches the Fitness
         // app and the home card exactly); fall back to individual queries only before the
@@ -325,16 +339,12 @@ final class ChallengeDetailViewModel {
         // Safety guard: if HealthKit returned all-zeros (Watch not yet synced, or
         // authorization denied for individual types), keep the existing CloudKit data
         // intact rather than clobbering valid scores with zeros.
-        let existingPoints = participations[myIdx].dailyScores.first(where: {
-            cal.isDate($0.date, inSameDayAs: today)
-        })?.points ?? 0
+        let existingPoints = participations[myIdx].dailyScores.first(where: \.isForToday)?.points ?? 0
         guard points > 0 || existingPoints == 0 else { return }
 
         // Update the existing today score, or insert a new in-memory one.
         let noonUTC = DailyScore.noonUTC(for: today)
-        if let scoreIdx = participations[myIdx].dailyScores.firstIndex(where: {
-            cal.isDate($0.date, inSameDayAs: today)
-        }) {
+        if let scoreIdx = participations[myIdx].dailyScores.firstIndex(where: \.isForToday) {
             participations[myIdx].dailyScores[scoreIdx].ringData = updatedRingData
             participations[myIdx].dailyScores[scoreIdx].points   = points
         } else {
@@ -354,9 +364,7 @@ final class ChallengeDetailViewModel {
         // refresh picks up the current score rather than the older sync snapshot.
         // The sync only runs on detail open and captures activity at that moment;
         // the overlay has fresher data and should win.
-        if let updated = participations[myIdx].dailyScores.first(where: {
-            cal.isDate($0.date, inSameDayAs: today)
-        }) {
+        if let updated = participations[myIdx].dailyScores.first(where: \.isForToday) {
             Task { try? await CloudKitManager.shared.saveDailyScores([updated]) }
         }
     }
@@ -382,6 +390,109 @@ final class ChallengeDetailViewModel {
                 await overlayLiveHealthKitData()
             }
             ParticipationCache.save(participations, challengeID: challenge.id)
+        }
+    }
+
+    // MARK: - Group totals (completed challenges)
+
+    /// One participant's lifetime contribution to the challenge.
+    struct MemberContribution: Identifiable, Equatable {
+        let id: String          // participation id
+        let user: AppUser
+        let steps: Double
+        let distanceMeters: Double
+        let workouts: Int
+    }
+
+    /// Contributions in leaderboard order, ready for the group totals card.
+    var groupContributions: [MemberContribution] {
+        Self.contributions(participations: rankedParticipations, workouts: challengeWorkouts)
+    }
+
+    /// Pure rollup: per-participant steps, distance, and workout counts.
+    /// Deduplicates daily scores by calendar day (keeping the highest-points record,
+    /// the same rule as ScoreAggregator) so save retries can't inflate totals.
+    nonisolated static func contributions(participations: [Participation],
+                                          workouts: [WorkoutSummary]) -> [MemberContribution] {
+        let workoutCounts = Dictionary(grouping: workouts, by: \.participationID)
+            .mapValues(\.count)
+        return participations.map { p in
+            var bestByDay: [Date: DailyScore] = [:]
+            for score in p.dailyScores {
+                let day = DailyScore.day(of: score.date)
+                if let existing = bestByDay[day], existing.points >= score.points { continue }
+                bestByDay[day] = score
+            }
+            return MemberContribution(
+                id: p.id,
+                user: p.user,
+                steps: bestByDay.values.map { $0.ringData.totalSteps }.reduce(0, +),
+                distanceMeters: bestByDay.values.map { $0.ringData.distanceMeters }.reduce(0, +),
+                workouts: workoutCounts[p.id] ?? 0
+            )
+        }
+    }
+
+    @MainActor
+    func loadGroupWorkouts() async {
+        guard challenge.status == .completed, challengeWorkouts.isEmpty else { return }
+        challengeWorkouts = (try? await ck.fetchWorkouts(challengeID: challenge.id)) ?? []
+    }
+
+    // MARK: - Reactions
+
+    /// Emojis received today per participation ID — displayed on leaderboard rows.
+    var todaysReactionsByParticipation: [String: [String]] {
+        Dictionary(grouping: reactions.filter(\.isFromToday), by: \.toParticipationID)
+            .mapValues { group in
+                group.sorted { $0.createdAt > $1.createdAt }.map(\.emoji)
+            }
+    }
+
+    /// The emoji the current user already sent this participant today, if any.
+    func myReactionToday(to participationID: String) -> String? {
+        let myUserID = UserSession.shared.userID ?? ""
+        return reactions.first {
+            $0.fromUserID == myUserID && $0.toParticipationID == participationID && $0.isFromToday
+        }?.emoji
+    }
+
+    @MainActor
+    func loadReactions() async {
+        guard let fetched = try? await ck.fetchReactions(challengeID: challenge.id) else { return }
+        reactions = fetched.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// Sends (or re-sends, updating the emoji) today's reaction to another participant.
+    @MainActor
+    func sendReaction(_ emoji: String, to recipient: Participation) async {
+        guard
+            Reaction.allowedEmojis.contains(emoji),
+            let me = currentUserParticipation,
+            me.id != recipient.id
+        else { return }
+
+        let reaction = Reaction(
+            id: Reaction.makeID(fromParticipationID: me.id, toParticipationID: recipient.id),
+            challengeID: challenge.id,
+            challengeTitle: challenge.title,
+            fromUserID: me.user.id,
+            fromName: me.user.displayName,
+            toUserID: recipient.user.id,
+            toParticipationID: recipient.id,
+            emoji: emoji,
+            createdAt: Date()
+        )
+
+        // Optimistic: show it on the row immediately; replace any earlier one today.
+        reactions.removeAll { $0.id == reaction.id }
+        reactions.insert(reaction, at: 0)
+
+        do {
+            try await ck.saveReaction(reaction)
+        } catch {
+            reactions.removeAll { $0.id == reaction.id }
+            self.error = "Couldn't send the reaction. Try again."
         }
     }
 
@@ -413,7 +524,7 @@ final class ChallengeDetailViewModel {
                     var merged = participations[i].dailyScores
                     for ckScore in ckScores {
                         let alreadyHave = merged.contains {
-                            Calendar.current.isDate($0.date, inSameDayAs: ckScore.date)
+                            DailyScore.day(of: $0.date) == DailyScore.day(of: ckScore.date)
                         }
                         if !alreadyHave { merged.append(ckScore) }
                     }
@@ -532,13 +643,12 @@ final class ChallengeDetailViewModel {
             let myUserID = UserSession.shared.userID ?? ""
             let updatedScores = try await ck.fetchDailyScores(challengeID: challenge.id,
                                                                since: lastFetchDate)
-            let today = Date()
             for score in updatedScores {
                 guard let idx = participations.firstIndex(where: { $0.id == score.participationID }) else { continue }
                 // Don't overwrite today's score for the current user — the HealthKit overlay
                 // is always more accurate than a CloudKit push that may carry stale/zero values.
                 let isMyTodayScore = participations[idx].user.id == myUserID
-                                  && Calendar.current.isDate(score.date, inSameDayAs: today)
+                                  && score.isForToday
                 if isMyTodayScore { continue }
 
                 if let scoreIdx = participations[idx].dailyScores.firstIndex(where: { $0.id == score.id }) {

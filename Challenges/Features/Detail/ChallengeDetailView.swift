@@ -39,6 +39,20 @@ struct ChallengeDetailView: View {
                     .padding(.top, 20)
                 }
 
+                // 2b. Overall stats for completed challenges — what everyone did together.
+                // Gated on having real data, not on leaderboardLoaded: cached
+                // participations already carry scores, so the card renders instantly
+                // on reopen instead of waiting for a fresh CloudKit round trip.
+                if challenge.status == .completed,
+                   vm.groupContributions.contains(where: {
+                       $0.steps > 0 || $0.distanceMeters > 0 || $0.workouts > 0
+                   }) {
+                    GroupTotalsCard(contributions: vm.groupContributions,
+                                    currentUserID: session.userID ?? "")
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                }
+
                 // 3. Activity hero card (current user's rings)
                 if let me = vm.currentUserParticipation, challenge.status == .active {
                     MyProgressView(participation: me)
@@ -100,9 +114,10 @@ struct ChallengeDetailView: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 // Share button
                 if challenge.status != .completed,
-                   challenge.creatorID == (session.userID ?? "") {
+                   challenge.creatorID == (session.userID ?? ""),
+                   let joinURL = URL(string: "challenges://join/\(challenge.inviteCode)") {
                     ShareLink(
-                        item: URL(string: "challenges://join/\(challenge.inviteCode)")!,
+                        item: joinURL,
                         message: Text("Join my fitness challenge! Code: \(challenge.inviteCode)")
                     ) {
                         Image(systemName: "square.and.arrow.up")
@@ -169,7 +184,8 @@ struct ChallengeDetailView: View {
             ParticipantDetailSheet(
                 participation: p,
                 challenge: challenge,
-                isCurrentUser: p.user.id == session.userID
+                isCurrentUser: p.user.id == session.userID,
+                vm: vm
             )
         }
         .sheet(isPresented: $showEditChallenge) {
@@ -184,6 +200,8 @@ struct ChallengeDetailView: View {
             }
         }
         .task { await vm.load() }
+        .task { await vm.loadReactions() }
+        .task { await vm.loadGroupWorkouts() }
         .refreshable { await vm.refresh() }
         // Re-sync when the app returns to the foreground. The Apple Watch batches
         // activity summaries and may not have pushed them to the iPhone HealthKit
@@ -195,6 +213,10 @@ struct ChallengeDetailView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .dailyScoreDidUpdate)) { _ in
             Task { await vm.handleScoreUpdate() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .reactionReceived)) { note in
+            guard note.userInfo?["challengeID"] as? String == challenge.id else { return }
+            Task { await vm.loadReactions() }
         }
         .userActivity("com.challenges.viewChallenge", isActive: true) { activity in
             activity.title = challenge.title
@@ -276,10 +298,12 @@ struct ChallengeDetailView: View {
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(vm.rankedParticipations.enumerated()), id: \.element.id) { idx, p in
+                            let isMe = p.user.id == session.userID
                             let row = LeaderboardRowView(
                                 participation: p,
-                                isCurrentUser: p.user.id == session.userID,
-                                showRank: challenge.status != .pending
+                                isCurrentUser: isMe,
+                                showRank: challenge.status != .pending,
+                                reactionEmojis: vm.todaysReactionsByParticipation[p.id] ?? []
                             )
                             // Tap a participant to see their score breakdown — only once
                             // there are scores to show (active/completed, not pending).
@@ -350,91 +374,166 @@ func rankMedal(_ rank: Int) -> String {
     switch rank { case 1: return "🥇"; case 2: return "🥈"; case 3: return "🥉"; default: return "" }
 }
 
-func rankColor(_ rank: Int) -> Color {
-    switch rank {
-    case 1: return .rankGold
-    case 2: return .rankSilver
-    case 3: return .rankBronze
-    default: return .primary
+
+// MARK: - Group Totals Card (completed)
+
+/// What the whole group did across the challenge — steps, distance, workouts — with
+/// each participant's share drawn as a colored segment. Small groups (≤4) get stacked
+/// per-person bars with an avatar legend; larger groups fall back to a single bar
+/// showing the viewer's share, since 10+ hairline segments read as noise.
+struct GroupTotalsCard: View {
+    let contributions: [ChallengeDetailViewModel.MemberContribution]
+    let currentUserID: String
+
+    @AppStorage("preferredUnits") private var preferredUnits = "Imperial"
+
+    /// Segment colors assigned by leaderboard order.
+    private static let palette: [Color] = [.exerciseRing, .moveRing, .standRing, .stepsColor]
+    private static let stackedLimit = 4
+
+    private var isStacked: Bool { contributions.count <= Self.stackedLimit }
+    private var useMetric: Bool { preferredUnits == "Metric" }
+
+    private var totalSteps: Double { contributions.map(\.steps).reduce(0, +) }
+    private var totalDistance: Double { contributions.map(\.distanceMeters).reduce(0, +) }
+    private var totalWorkouts: Int { contributions.map(\.workouts).reduce(0, +) }
+
+    private var me: ChallengeDetailViewModel.MemberContribution? {
+        contributions.first { $0.user.id == currentUserID }
     }
-}
 
-// MARK: - Standing Summary Card (active)
+    private func color(at index: Int) -> Color {
+        Self.palette[index % Self.palette.count]
+    }
 
-struct StandingSummaryCard: View {
-    let standing: ChallengeDetailViewModel.Standing
+    private func distanceText(_ meters: Double) -> String {
+        useMetric
+            ? String(format: "%.1f km", meters / 1000)
+            : String(format: "%.1f mi", meters / 1609.344)
+    }
 
     var body: some View {
-        let s = standing
-        let leaderPoints = s.points + s.pointsBehindLeader
-        let fill = leaderPoints > 0 ? s.points / leaderPoints : 1
+        VStack(alignment: .leading, spacing: 12) {
+            FitnessSectionHeader(title: "Overall Stats")
+                .padding(.horizontal, 4)
 
-        VStack(alignment: .leading, spacing: 16) {
-            // Header: label + total points
+            VStack(alignment: .leading, spacing: 14) {
+                metricRow(label: "Steps",
+                          total: Int(totalSteps).formatted(),
+                          values: contributions.map(\.steps),
+                          myText: me.map { Int($0.steps).formatted() })
+                metricRow(label: "Distance",
+                          total: distanceText(totalDistance),
+                          values: contributions.map(\.distanceMeters),
+                          myText: me.map { distanceText($0.distanceMeters) })
+                metricRow(label: "Workouts",
+                          total: totalWorkouts.formatted(),
+                          values: contributions.map { Double($0.workouts) },
+                          myText: me.map { $0.workouts.formatted() })
+
+                if isStacked {
+                    legend
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+    }
+
+    // MARK: Legend — one avatar per participant, ringed in their segment color.
+
+    private var legend: some View {
+        HStack(spacing: 10) {
+            ForEach(Array(contributions.enumerated()), id: \.element.id) { idx, member in
+                avatar(for: member.user)
+                    .frame(width: 22, height: 22)
+                    .overlay(Circle().strokeBorder(color(at: idx), lineWidth: 1))
+                    .accessibilityLabel(member.user.displayName)
+            }
+        }
+    }
+
+    private func avatar(for user: AppUser) -> some View {
+        Circle()
+            .fill(Color.cardInset)
+            .overlay {
+                if let img = AvatarCache.load(userID: user.id)
+                    ?? user.avatarURL.flatMap({ UIImage(contentsOfFile: $0.path) }) {
+                    Image(uiImage: img).resizable().scaledToFill().clipShape(Circle())
+                } else {
+                    Text(user.displayName.prefix(1).uppercased())
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+    }
+
+    // MARK: Metric rows
+
+    private func metricRow(label: String, total: String, values: [Double], myText: String?) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline) {
-                Text("YOUR STANDING")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(0.8)
+                Text(label)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(Int(s.points).formatted())
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                    Text("PTS")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
-                }
+                Text(total)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
             }
 
-            // Rank
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(rankOrdinal(s.rank))
-                    .font(.system(size: 42, weight: .heavy, design: .rounded))
-                    .foregroundStyle(rankColor(s.rank))
-                if !rankMedal(s.rank).isEmpty {
-                    Text(rankMedal(s.rank)).font(.system(size: 26))
-                }
-                Text("of \(s.total)")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.secondary)
+            if isStacked {
+                stackedBar(values: values)
+            } else if let me, let myText {
+                // Viewer's share of the group. If the viewer isn't a participant
+                // there's no share to draw — the label/total line stands alone.
+                viewerBar(values: values)
+                Text("\(me.user.displayName) \(myText)")
+                    .font(.caption2)
+                    .foregroundStyle(Color.exerciseRing)
             }
+        }
+    }
 
-            // Progress toward the leader + gap callout
-            VStack(alignment: .leading, spacing: 8) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.08))
-                        Capsule()
-                            .fill(LinearGradient(colors: [.moveRing, .exerciseRing],
-                                                 startPoint: .leading, endPoint: .trailing))
-                            .frame(width: max(10, geo.size.width * min(max(fill, 0), 1)))
+    /// One colored segment per participant, proportional to their share.
+    private func stackedBar(values: [Double]) -> some View {
+        let total = values.reduce(0, +)
+        return GeometryReader { geo in
+            if total > 0 {
+                HStack(spacing: 2) {
+                    ForEach(Array(values.enumerated()), id: \.offset) { idx, value in
+                        if value > 0 {
+                            Rectangle()
+                                .fill(color(at: idx))
+                                .frame(width: max(2, (geo.size.width - CGFloat(values.count - 1) * 2) * value / total))
+                        }
                     }
                 }
-                .frame(height: 8)
+                .clipShape(Capsule())
+            } else {
+                Capsule().fill(Color.primary.opacity(0.08))
+            }
+        }
+        .frame(height: 8)
+    }
 
-                if s.rank == 1 {
-                    Label("You're in the lead", systemImage: "crown.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.rankGold)
-                } else {
-                    HStack(spacing: 6) {
-                        Label("\(Int(s.pointsToNextRank).formatted()) to #\(s.rank - 1)",
-                              systemImage: "arrow.up.right")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(Color.moveRing)
-                        Text("·").foregroundStyle(.tertiary)
-                        Text("\(Int(s.pointsBehindLeader).formatted()) behind 1st")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+    /// Large-group fallback: a single bar showing the viewer's share of the group.
+    private func viewerBar(values: [Double]) -> some View {
+        let total = values.reduce(0, +)
+        let mine = me.flatMap { m in contributions.firstIndex(where: { $0.id == m.id }).map { values[$0] } } ?? 0
+        return GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.08))
+                if total > 0, mine > 0 {
+                    Capsule()
+                        .fill(Color.exerciseRing)
+                        .frame(width: max(6, geo.size.width * mine / total))
                 }
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity)
-        .background(Color.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .frame(height: 8)
     }
 }
 
@@ -453,7 +552,7 @@ struct ResultsHeaderCard: View {
                     .font(.title3.weight(.bold))
                     .foregroundStyle(.primary)
             }
-            Text("You finished \(rankOrdinal(standing.rank)) of \(standing.total) \(rankMedal(standing.rank))")
+            Text("You finished \(rankOrdinal(standing.rank)) \(rankMedal(standing.rank))")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -475,6 +574,8 @@ private struct ParticipantDetailSheet: View {
     let participation: Participation
     let challenge: Challenge
     let isCurrentUser: Bool
+    /// Enables the reaction bar; nil (e.g. previews) hides it.
+    var vm: ChallengeDetailViewModel? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var workouts: [WorkoutSummary] = []
 
@@ -515,6 +616,10 @@ private struct ParticipantDetailSheet: View {
                 VStack(spacing: 20) {
                     header
 
+                    if canReact {
+                        reactionBar
+                    }
+
                     if scores.isEmpty {
                         ContentUnavailableView(
                             "No activity yet",
@@ -546,6 +651,46 @@ private struct ParticipantDetailSheet: View {
             .task { await loadWorkouts() }
         }
         .presentationDetents([.large])
+    }
+
+    // MARK: Reactions
+
+    private var canReact: Bool {
+        challenge.status == .active && !isCurrentUser && vm?.currentUserParticipation != nil
+    }
+
+    private var sentEmoji: String? {
+        vm?.myReactionToday(to: participation.id)
+    }
+
+    private var reactionBar: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                ForEach(Reaction.allowedEmojis, id: \.self) { emoji in
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        Task { await vm?.sendReaction(emoji, to: participation) }
+                    } label: {
+                        Text(emoji)
+                            .font(.system(size: 22))
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 8)
+                            .background(Color.cardInset, in: Capsule())
+                            .overlay(
+                                Capsule().strokeBorder(
+                                    sentEmoji == emoji ? Color.exerciseRing : .clear,
+                                    lineWidth: 1.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text(sentEmoji.map { "\($0) sent. Tap another to swap." }
+                 ?? "One reaction per day. Tap another to swap.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: Workouts
@@ -911,9 +1056,11 @@ private struct ScoreHistoryChart: View {
     var title: String = "My Points"
 
     private var scores: [DailyScore] {
-        let today = Calendar.current.startOfDay(for: Date())
+        // Bound by the challenge window rather than "today": participants in timezones
+        // ahead of the viewer legitimately have a score for the viewer's tomorrow.
+        let endDay = Calendar.current.startOfDay(for: challenge.endDate)
         return participation.dailyScores
-            .filter { Calendar.current.startOfDay(for: $0.date) <= today }
+            .filter { $0.localDayStart() <= endDay }
             .sorted { $0.date < $1.date }
     }
 
@@ -948,7 +1095,7 @@ private struct ScoreHistoryChart: View {
             FitnessSectionHeader(title: title)
 
             Chart(scores, id: \.id) { score in
-                let day = Calendar.current.startOfDay(for: score.date)
+                let day = score.localDayStart()
                 AreaMark(
                     x: .value("Day", day, unit: .day),
                     y: .value("Points", score.points)
@@ -1070,24 +1217,6 @@ private enum ChallengeDetailPreviewData {
 
     static let standingSecond = ChallengeDetailViewModel.Standing(
         rank: 2, total: 5, points: 2180, pointsBehindLeader: 120, pointsToNextRank: 120)
-    static let standingFirst = ChallengeDetailViewModel.Standing(
-        rank: 1, total: 5, points: 2300, pointsBehindLeader: 0, pointsToNextRank: 0)
-}
-
-#Preview("Standing — 2nd") {
-    StandingSummaryCard(standing: ChallengeDetailPreviewData.standingSecond)
-        .padding()
-        .frame(maxHeight: .infinity)
-        .background(Color.appBackground)
-        .preferredColorScheme(.dark)
-}
-
-#Preview("Standing — leading") {
-    StandingSummaryCard(standing: ChallengeDetailPreviewData.standingFirst)
-        .padding()
-        .frame(maxHeight: .infinity)
-        .background(Color.appBackground)
-        .preferredColorScheme(.dark)
 }
 
 #Preview("Results header") {

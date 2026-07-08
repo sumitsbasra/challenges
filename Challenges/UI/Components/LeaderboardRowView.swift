@@ -8,12 +8,16 @@ struct LeaderboardRowView: View {
     let participation: Participation
     let isCurrentUser: Bool
     var showRank: Bool = true
+    /// Emojis this participant received today, newest first (empty = hidden).
+    var reactionEmojis: [String] = []
 
     private var displayName: String { participation.user.displayName }
     private var todayPts: Double {
+        // Max, not sum — duplicate same-day records from save retries must not inflate.
         participation.dailyScores
-            .filter { Calendar.current.isDate($0.date, inSameDayAs: Date()) }
-            .reduce(0) { $0 + $1.points }
+            .filter(\.isForToday)
+            .map(\.points)
+            .max() ?? 0
     }
 
     var body: some View {
@@ -116,6 +120,13 @@ struct LeaderboardRowView: View {
                 Image(systemName: participation.hasAppleWatch ? "applewatch" : "iphone")
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
+                if !reactionEmojis.isEmpty {
+                    Text(reactionEmojis.prefix(3).joined())
+                        .font(.system(size: 11))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.cardInset, in: Capsule())
+                }
             }
             if todayPts > 0 {
                 Text("+\(Int(todayPts).formatted()) today")

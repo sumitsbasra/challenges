@@ -87,8 +87,9 @@ struct HomeView: View {
             vm.applySyncedScores(synced)
             BackgroundTaskScheduler.scheduleAppRefresh()
             Task { await NotificationScheduler.reschedule(for: vm.allChallenges) }
-            let activeIDs = vm.allChallenges.filter { $0.status == .active }.map { $0.id }
-            await CloudKitManager.shared.registerSubscriptions(forActiveChallengeIDs: activeIDs)
+            // Pending challenges included so join pushes arrive before the start date.
+            let subscribableIDs = vm.allChallenges.filter { $0.status != .completed }.map { $0.id }
+            await CloudKitManager.shared.registerSubscriptions(forChallengeIDs: subscribableIDs)
         }
         .refreshable {
             guard let userID = session.userID else { return }

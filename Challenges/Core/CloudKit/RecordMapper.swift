@@ -13,6 +13,7 @@ enum RecordMapper {
         static let participation = "Participation"
         static let dailyScore    = "DailyScore"
         static let workout       = "Workout"
+        static let reaction      = "Reaction"
     }
 
     // MARK: - AppUser
@@ -257,6 +258,51 @@ enum RecordMapper {
         record["duration"]     = workout.duration
         record["activeEnergy"] = workout.activeEnergy
         record["distance"]     = workout.distance
+        return record
+    }
+
+    // MARK: - Reaction
+
+    static func reaction(from record: CKRecord) -> Reaction? {
+        guard
+            let challengeRef = record["challengeRef"] as? CKRecord.Reference,
+            let toUserRef    = record["toUserRef"] as? CKRecord.Reference,
+            let fromUserRef  = record["fromUserRef"] as? CKRecord.Reference,
+            let toParticipationRef = record["toParticipationRef"] as? CKRecord.Reference,
+            let emoji        = record["emoji"] as? String,
+            let createdAt    = record["createdAt"] as? Date
+        else {
+            Logger.cloudKit.error("RecordMapper.reaction(from:) failed — record \(record.recordID.recordName, privacy: .public), fields: \(record.allKeys(), privacy: .public)")
+            return nil
+        }
+        return Reaction(
+            id: record.recordID.recordName,
+            challengeID: challengeRef.recordID.recordName,
+            challengeTitle: record["challengeTitle"] as? String ?? "",
+            fromUserID: fromUserRef.recordID.recordName,
+            fromName: record["fromName"] as? String ?? "Someone",
+            toUserID: toUserRef.recordID.recordName,
+            toParticipationID: toParticipationRef.recordID.recordName,
+            emoji: emoji,
+            createdAt: createdAt
+        )
+    }
+
+    static func record(from reaction: Reaction) -> CKRecord {
+        let recordID = CKRecord.ID(recordName: reaction.id)
+        let record = CKRecord(recordType: RecordType.reaction, recordID: recordID)
+        record["challengeRef"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: reaction.challengeID), action: .none)
+        record["fromUserRef"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: reaction.fromUserID), action: .none)
+        record["toUserRef"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: reaction.toUserID), action: .none)
+        record["toParticipationRef"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: reaction.toParticipationID), action: .none)
+        record["challengeTitle"] = reaction.challengeTitle
+        record["fromName"]       = reaction.fromName
+        record["emoji"]          = reaction.emoji
+        record["createdAt"]      = reaction.createdAt
         return record
     }
 }

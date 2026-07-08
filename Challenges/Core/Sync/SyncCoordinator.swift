@@ -55,7 +55,16 @@ actor SyncCoordinator {
                 }
             }
 
-            await updateWidgetState(userID: userID, activeChallenges: active)
+            // Rank every active challenge once — feeds both overtake detection and
+            // the widget snapshot without duplicate fetches.
+            var standingsByID: [String: [Participation]] = [:]
+            for challenge in active {
+                guard let standings = try? await rankedStandings(challengeID: challenge.id, ck: ck) else { continue }
+                standingsByID[challenge.id] = standings
+                await OvertakeMonitor.evaluate(challenge: challenge, standings: standings, userID: userID)
+            }
+
+            updateWidgetState(userID: userID, activeChallenges: active, standings: standingsByID)
             return results
         } catch {
             // A cancelled fetch (view/task torn down) is benign — don't log it as an error.
@@ -255,11 +264,28 @@ actor SyncCoordinator {
         }
     }
 
+    // MARK: - Standings
+
+    /// Participations with their scores attached, ranked. `fetchParticipations` alone
+    /// returns records without dailyScores, which would rank everyone at 0 points.
+    private func rankedStandings(challengeID: String, ck: CloudKitManager) async throws -> [Participation] {
+        async let participationsTask = ck.fetchParticipations(challengeID: challengeID)
+        async let scoresTask         = ck.fetchDailyScores(challengeID: challengeID)
+        var participations = try await participationsTask
+        let scoresByParticipation = Dictionary(grouping: try await scoresTask, by: \.participationID)
+        for i in participations.indices {
+            participations[i].dailyScores = scoresByParticipation[participations[i].id] ?? []
+        }
+        ScoreAggregator.aggregate(&participations)
+        return participations
+    }
+
     // MARK: - Widget state
 
     /// Writes the top active challenge's rank and score to shared App Group UserDefaults
     /// so the widget can display current standings without a CloudKit fetch.
-    private func updateWidgetState(userID: String, activeChallenges: [Challenge]) async {
+    private func updateWidgetState(userID: String, activeChallenges: [Challenge],
+                                   standings: [String: [Participation]]) {
         // `activeChallenges` comes from an unordered filter, so pick a stable "top"
         // challenge: the one ending soonest (most urgent), tie-broken by id. Without
         // this the widget could flip between challenges on successive syncs.
@@ -271,25 +297,18 @@ actor SyncCoordinator {
             WidgetDataWriter.clear()
             return
         }
-        let ck = await MainActor.run { CloudKitManager.shared }
-        do {
-            var participations = try await ck.fetchParticipations(challengeID: topChallenge.id)
-            ScoreAggregator.aggregate(&participations)
-            guard let mine = participations.first(where: { $0.user.id == userID }) else { return }
-            let daysRemaining = max(0, Calendar.current.dateComponents([.day], from: Date(), to: topChallenge.endDate).day ?? 0)
-            let state = WidgetState(
-                challengeTitle: topChallenge.title,
-                challengeID: topChallenge.id,
-                rank: mine.rank,
-                totalPoints: mine.totalPoints,
-                daysRemaining: daysRemaining,
-                participantCount: participations.count,
-                updatedAt: Date()
-            )
-            WidgetDataWriter.write(state: state)
-        } catch {
-            Logger.sync.error("updateWidgetState failed for challenge \(topChallenge.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
-        }
+        guard let participations = standings[topChallenge.id],
+              let mine = participations.first(where: { $0.user.id == userID }) else { return }
+        let state = WidgetState(
+            challengeTitle: topChallenge.title,
+            challengeID: topChallenge.id,
+            rank: mine.rank,
+            totalPoints: mine.totalPoints,
+            daysRemaining: topChallenge.daysRemaining(),
+            participantCount: participations.count,
+            updatedAt: Date()
+        )
+        WidgetDataWriter.write(state: state)
     }
 
     private func transitionStatus(of challenge: Challenge, to status: ChallengeStatus,

@@ -51,7 +51,10 @@ A single over-achieved ring can reach the cap on its own, just like Apple. Scori
 - **Siri & Shortcuts** — "What's my rank in [challenge]?" returns a spoken result without opening the app; works with Apple Intelligence natural language on iOS 18.1+
 - **Spotlight search** — challenges indexed in Core Spotlight; tap a result to jump straight to the detail view
 - **Home Screen widget** — shows current rank, points, days remaining, and participant count; Smart Stack relevance hints surface it at 7am and 7pm
-- **Local notifications** — day-before reminder (5 PM), first-day and last-day nudges, a daily progress reminder, and a final-standings alert the morning after the challenge ends; copy rotates to stay fresh; per-type toggles in Profile; respects iOS notification permission state
+- **Overtake alerts** — when a background sync detects your rank dropped, a local notification names who passed you and the point gap ("Jake just passed you in Road to NYC. You're 43 points behind — go get them!"); throttled to one per challenge per 3 hours so rank ping-pong between syncs doesn't spam
+- **Reactions** — long-press a leaderboard row to send 🔥/👏/😤; the recipient gets a push with the sender's name even when their app is closed (CloudKit subscription ships the display fields with the silent push). One reaction per person per day — re-sending swaps the emoji (deterministic day-keyed record IDs). Today's received reactions show as a chip on the leaderboard row
+- **Join alerts** — when someone joins one of your pending or active challenges, a push names them ("Maya just joined Road to NYC"); your own joins from other devices are filtered out
+- **Local notifications** — day-before reminder (5 PM), first-day and last-day nudges, a daily progress reminder, and a final-standings alert the morning after the challenge ends; copy rotates to stay fresh; per-type toggles in Profile (including overtake alerts, reactions, and joins); respects iOS notification permission state
 - **Background sync** — HealthKit background delivery (observer queries) wakes the app to sync scores when new activity data arrives, even when the app is closed; backed up by a `BGAppRefreshTask` every 15 minutes and the widget timeline reload
 
 ## Project structure
@@ -130,6 +133,7 @@ Set these in the CloudKit Dashboard (required for queries to work):
 | `Participation` | `challengeRef`, `userRef`, `status` |
 | `DailyScore` | `challengeRef`, `participationRef`, `date` |
 | `Workout` | `challengeRef`, `participationRef` |
+| `Reaction` | `challengeRef`, `toUserRef` |
 
 > **Deploy the schema to Production before distributing.** CloudKit's Development (Xcode runs) and Production (TestFlight/App Store) environments have separate schemas and data. New fields and indexes — e.g. the `Users.avatarAsset` field — must be pushed via **CloudKit Dashboard → Deploy Schema Changes**, or that data silently fails to persist for TestFlight/App Store users.
 

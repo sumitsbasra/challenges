@@ -2,7 +2,7 @@
   "fill" : {
     "linear-gradient" : [
       "srgb:0.00000,0.00000,0.00000,1.00000",
-      "srgb:0.00000,0.00000,0.00000,1.00000"
+      "display-p3:0.14238,0.14238,0.14238,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -17,14 +17,14 @@
   },
   "groups" : [
     {
-      "blur-material" : null,
+      "blur-material" : 0.13,
       "layers" : [
         {
           "glass" : true,
           "image-name" : "trophy.png",
           "name" : "trophy",
           "position" : {
-            "scale" : 0.5,
+            "scale" : 0.55,
             "translation-in-points" : [
               0,
               0
@@ -41,19 +41,21 @@
       },
       "shadow" : {
         "kind" : "layer-color",
-        "opacity" : 0.04
+        "opacity" : 0.69
       },
       "specular" : true,
       "translucency" : {
-        "enabled" : false,
-        "value" : 0
+        "enabled" : true,
+        "value" : 0.45
       }
     },
     {
       "blur-material" : 0.5,
+      "hidden" : true,
       "layers" : [
         {
           "glass" : true,
+          "hidden" : false,
           "image-name" : "trophy_black.png",
           "name" : "trophy_black",
           "position" : {
@@ -83,6 +85,7 @@
       }
     },
     {
+      "blur-material" : 0.5,
       "layers" : [
         {
           "image-name" : "stripes.png",
@@ -98,12 +101,12 @@
       },
       "shadow" : {
         "kind" : "layer-color",
-        "opacity" : 1
+        "opacity" : 0.25
       },
       "specular" : true,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.27
+        "value" : 0.45
       }
     },
     {

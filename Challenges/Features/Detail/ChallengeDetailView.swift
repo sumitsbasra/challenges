@@ -1104,7 +1104,7 @@ struct ScoreHistoryChart: View {
     private let yMax: Double = 600
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 18) {
             FitnessSectionHeader(title: title)
 
             Chart {
@@ -1154,14 +1154,10 @@ struct ScoreHistoryChart: View {
                 }
             }
             .frame(height: 170)
-
-            Text("Max 600 pts per day")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
-        .padding(.bottom, 12)
+        .padding(.bottom, 16)
         .background(Color.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }

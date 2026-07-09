@@ -1063,15 +1063,16 @@ struct ScoreHistoryChart: View {
     private var startDay: Date { cal.startOfDay(for: challenge.startDate) }
     private var endDay: Date { cal.startOfDay(for: challenge.endDate) }
 
-    /// Best score per local calendar day (duplicate records can't inflate a bar).
-    /// Bound by the challenge window rather than "today": participants in timezones
-    /// ahead of the viewer legitimately have a score for the viewer's tomorrow.
+    /// Best score per local calendar day (duplicate records can't inflate a bar),
+    /// clamped to the 600 daily cap so a stray over-cap record can't overshoot the
+    /// axis. Bound by the challenge window rather than "today": participants in
+    /// timezones ahead of the viewer legitimately have a score for the viewer's tomorrow.
     private var entries: [(day: Date, points: Double)] {
         var best: [Date: Double] = [:]
         for score in participation.dailyScores {
             let day = score.localDayStart()
             guard day >= startDay, day <= endDay else { continue }
-            best[day] = max(best[day] ?? 0, score.points)
+            best[day] = min(600, max(best[day] ?? 0, score.points))
         }
         return best.map { ($0.key, $0.value) }.sorted { $0.day < $1.day }
     }
@@ -1098,12 +1099,9 @@ struct ScoreHistoryChart: View {
         return entries.first { $0.day == day }
     }
 
-    /// Top of the Y axis: round the best day up to the next 300 (min 300) so bars fill
-    /// the vertical space; 600 is the daily cap, so full days reach the top gridline.
-    private var yMax: Double {
-        let best = entries.map(\.points).max() ?? 0
-        return max(300, (best / 300).rounded(.up) * 300)
-    }
+    /// Fixed top of the Y axis: 600 is the daily cap, so a maxed day always reaches
+    /// the top gridline and the scale reads the same on every challenge.
+    private let yMax: Double = 600
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

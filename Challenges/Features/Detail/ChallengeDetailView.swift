@@ -1139,7 +1139,9 @@ struct ScoreHistoryChart: View {
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day)) { value in
                     if let date = value.as(Date.self) {
-                        AxisValueLabel(date.formatted(.dateTime.day()), centered: true)
+                        // Weekday labels like Apple Health's weekly view; the selection
+                        // callout carries the exact date.
+                        AxisValueLabel(date.formatted(.dateTime.weekday(.abbreviated)), centered: true)
                             .font(.system(size: 10))
                             .foregroundStyle(Color.secondary)
                     }

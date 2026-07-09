@@ -631,7 +631,6 @@ private struct ParticipantDetailSheet: View {
                         statsGrid
                         ScoreHistoryChart(participation: participation, challenge: challenge,
                                           title: isCurrentUser ? "My Points" : "\(participation.user.displayName)'s Points")
-                        DailyBreakdownView(participation: participation, challenge: challenge)
                     }
 
                     if !workouts.isEmpty {
@@ -1050,106 +1049,143 @@ private struct PodiumPillar: View {
 
 // MARK: - Score History Chart
 
-private struct ScoreHistoryChart: View {
+/// Apple Health-style daily points chart: bars in a scrollable 7-day window covering the
+/// full challenge, tap or drag to select a day and see its points in a callout.
+struct ScoreHistoryChart: View {
     let participation: Participation
     let challenge: Challenge
     var title: String = "My Points"
 
-    private var scores: [DailyScore] {
-        // Bound by the challenge window rather than "today": participants in timezones
-        // ahead of the viewer legitimately have a score for the viewer's tomorrow.
-        let endDay = Calendar.current.startOfDay(for: challenge.endDate)
-        return participation.dailyScores
-            .filter { $0.localDayStart() <= endDay }
-            .sorted { $0.date < $1.date }
+    /// Raw (continuous) selection from the chart gesture; snapped to a day for display.
+    @State private var rawSelection: Date?
+
+    private var cal: Calendar { Calendar.current }
+    private var startDay: Date { cal.startOfDay(for: challenge.startDate) }
+    private var endDay: Date { cal.startOfDay(for: challenge.endDate) }
+
+    /// Best score per local calendar day (duplicate records can't inflate a bar).
+    /// Bound by the challenge window rather than "today": participants in timezones
+    /// ahead of the viewer legitimately have a score for the viewer's tomorrow.
+    private var entries: [(day: Date, points: Double)] {
+        var best: [Date: Double] = [:]
+        for score in participation.dailyScores {
+            let day = score.localDayStart()
+            guard day >= startDay, day <= endDay else { continue }
+            best[day] = max(best[day] ?? 0, score.points)
+        }
+        return best.map { ($0.key, $0.value) }.sorted { $0.day < $1.day }
     }
 
-    private var today: Date { Calendar.current.startOfDay(for: Date()) }
-
-    /// Half-day before start — pads the left edge so the first dot isn't flush with the axis.
-    private var chartStartDate: Date {
-        let start = Calendar.current.startOfDay(for: challenge.startDate)
-        return start.addingTimeInterval(-43_200) // -12 hours
+    private var dayCount: Int {
+        (cal.dateComponents([.day], from: startDay, to: endDay).day ?? 0) + 1
     }
 
-    /// Half-day after the last day ends — pads the right edge so the last dot has room.
-    private var chartEndDate: Date {
-        let endDay = Calendar.current.startOfDay(for: challenge.endDate)
-        let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: endDay) ?? endDay
-        return nextDay.addingTimeInterval(43_200) // +12 hours
+    /// End of the axis: the slot after the final day so its bar has room.
+    private var domainEnd: Date {
+        cal.date(byAdding: .day, value: 1, to: endDay) ?? endDay
     }
 
-    /// Top of the Y axis: round the day's best score up to the next 500 (min 500) so the
-    /// line fills the vertical space instead of floating against a fixed 2000 ceiling.
+    /// Land on the most recent 7 days with data rather than the challenge start.
+    private var initialScrollDate: Date {
+        let anchor = min(cal.startOfDay(for: Date()), endDay)
+        let windowStart = cal.date(byAdding: .day, value: -6, to: anchor) ?? anchor
+        return max(startDay, windowStart)
+    }
+
+    private var selectedEntry: (day: Date, points: Double)? {
+        guard let rawSelection else { return nil }
+        let day = cal.startOfDay(for: rawSelection)
+        return entries.first { $0.day == day }
+    }
+
+    /// Top of the Y axis: round the best day up to the next 300 (min 300) so bars fill
+    /// the vertical space; 600 is the daily cap, so full days reach the top gridline.
     private var yMax: Double {
-        let best = scores.map(\.points).max() ?? 0
-        return max(500, (best / 500).rounded(.up) * 500)
-    }
-
-    private var yAxisValues: [Double] {
-        Array(stride(from: 0, through: yMax, by: 500))
+        let best = entries.map(\.points).max() ?? 0
+        return max(300, (best / 300).rounded(.up) * 300)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             FitnessSectionHeader(title: title)
 
-            Chart(scores, id: \.id) { score in
-                let day = score.localDayStart()
-                AreaMark(
-                    x: .value("Day", day, unit: .day),
-                    y: .value("Points", score.points)
-                )
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [Color.moveRing.opacity(0.35), Color.moveRing.opacity(0.0)],
-                        startPoint: .top,
-                        endPoint: .bottom
+            Chart {
+                ForEach(entries, id: \.day) { entry in
+                    BarMark(
+                        x: .value("Day", entry.day, unit: .day),
+                        y: .value("Points", entry.points)
                     )
-                )
-                .interpolationMethod(.monotone)
-                LineMark(
-                    x: .value("Day", day, unit: .day),
-                    y: .value("Points", score.points)
-                )
-                .foregroundStyle(Color.moveRing)
-                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                .interpolationMethod(.monotone)
-                PointMark(
-                    x: .value("Day", day, unit: .day),
-                    y: .value("Points", score.points)
-                )
-                .foregroundStyle(day == today ? Color.moveRing : Color.moveRing.opacity(0.7))
-                .symbolSize(day == today ? 40 : 20)
+                    .foregroundStyle(barColor(for: entry.day))
+                    .cornerRadius(3)
+                }
+
+                if let sel = selectedEntry {
+                    RuleMark(x: .value("Selected", sel.day, unit: .day))
+                        .foregroundStyle(Color.secondary.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                        .zIndex(-1)
+                        .annotation(
+                            position: .top, spacing: 2,
+                            overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        ) {
+                            selectionCallout(sel)
+                        }
+                }
             }
+            .chartScrollableAxes(.horizontal)
+            .chartXVisibleDomain(length: Double(min(7, dayCount)) * 86_400)
+            .chartScrollPosition(initialX: initialScrollDate)
+            .chartXSelection(value: $rawSelection)
+            .chartXScale(domain: startDay...domainEnd)
+            .chartYScale(domain: 0...yMax)
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day)) { value in
                     if let date = value.as(Date.self) {
-                        // "M/d" → "3/24", "3/25", etc.
-                        let label = date.formatted(.dateTime.day())
-                        AxisValueLabel(label)
+                        AxisValueLabel(date.formatted(.dateTime.day()), centered: true)
                             .font(.system(size: 10))
                             .foregroundStyle(Color.secondary)
                     }
                 }
             }
             .chartYAxis {
-                AxisMarks(position: .leading, values: yAxisValues) { value in
+                AxisMarks(position: .leading, values: Array(stride(from: 0, through: yMax, by: 300))) { _ in
                     AxisValueLabel()
                         .font(.system(size: 10))
                         .foregroundStyle(Color.secondary)
                     AxisGridLine().foregroundStyle(Color.white.opacity(0.07))
                 }
             }
-            .chartXScale(domain: chartStartDate...chartEndDate)
-            .chartYScale(domain: 0...yMax)
-            .frame(height: 100)
+            .frame(height: 170)
+
+            Text("Max 600 pts per day")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
-        .padding(.bottom, 16)
+        .padding(.bottom, 12)
         .background(Color.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    /// When a day is selected, keep it vivid and dim the rest so the focus reads clearly.
+    private func barColor(for day: Date) -> Color {
+        guard let sel = selectedEntry else { return .moveRing }
+        return day == sel.day ? .moveRing : Color.moveRing.opacity(0.35)
+    }
+
+    private func selectionCallout(_ entry: (day: Date, points: Double)) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("\(Int(entry.points)) pts")
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+            Text(entry.day, format: .dateTime.month(.abbreviated).day())
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.cardInset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -1217,6 +1253,49 @@ private enum ChallengeDetailPreviewData {
 
     static let standingSecond = ChallengeDetailViewModel.Standing(
         rank: 2, total: 5, points: 2180, pointsBehindLeader: 120, pointsToNextRank: 120)
+
+    /// Long challenge for exercising the scrollable chart: 24 days, 18 elapsed,
+    /// varied scores with a couple of zero-days (no record) mixed in.
+    static func marathonChallenge() -> Challenge {
+        let cal = Calendar.current
+        return Challenge(
+            id: "c2", title: "Road to NYC", creatorID: "u1",
+            startDate: cal.date(byAdding: .day, value: -17, to: Date())!,
+            endDate: cal.date(byAdding: .day, value: 6, to: Date())!,
+            status: .active, inviteCode: "FX4K9R",
+            createdAt: cal.date(byAdding: .day, value: -18, to: Date())!
+        )
+    }
+
+    static func marathonParticipation() -> Participation {
+        let cal = Calendar.current
+        var p = Participation(
+            id: "p2", challengeID: "c2", user: user,
+            joinedAt: cal.date(byAdding: .day, value: -17, to: Date())!,
+            status: .active, hasAppleWatch: true
+        )
+        let pointsByDay: [Double] = [420, 600, 380, 0, 510, 600, 455, 300, 600,
+                                     580, 0, 490, 600, 350, 600, 525, 440, 600]
+        p.dailyScores = pointsByDay.enumerated().compactMap { i, pts in
+            guard pts > 0 else { return nil }   // rest days: no record at all
+            let day = cal.date(byAdding: .day, value: -17 + i, to: Date())!
+            let ring = RingData(moveRingPct: 1, exerciseRingPct: 1, standRingPct: 1,
+                                stepsPct: 0, activeEnergyPct: 0, syncSource: .watch)
+            return DailyScore(id: "m\(i)", participationID: "p2", challengeID: "c2",
+                              date: DailyScore.noonUTC(for: day), points: pts,
+                              ringData: ring, lastSyncedAt: day)
+        }
+        return p
+    }
+}
+
+#Preview("Points chart") {
+    ScoreHistoryChart(participation: ChallengeDetailPreviewData.marathonParticipation(),
+                      challenge: ChallengeDetailPreviewData.marathonChallenge())
+        .padding()
+        .frame(maxHeight: .infinity)
+        .background(Color.appBackground)
+        .preferredColorScheme(.dark)
 }
 
 #Preview("Results header") {

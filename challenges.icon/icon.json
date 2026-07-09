@@ -1,8 +1,12 @@
 {
+  "features" : [
+    "refractivity",
+    "specular-location"
+  ],
   "fill" : {
     "linear-gradient" : [
-      "srgb:0.00000,0.00000,0.00000,1.00000",
-      "display-p3:0.14238,0.14238,0.14238,1.00000"
+      "display-p3:0.11879,0.11879,0.11879,1.00000",
+      "srgb:0.00000,0.00000,0.00000,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -24,7 +28,7 @@
           "image-name" : "trophy.png",
           "name" : "trophy",
           "position" : {
-            "scale" : 0.55,
+            "scale" : 0.5,
             "translation-in-points" : [
               0,
               0
@@ -46,7 +50,7 @@
       "specular" : true,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.45
+        "value" : 0.5
       }
     },
     {
@@ -54,6 +58,9 @@
       "hidden" : true,
       "layers" : [
         {
+          "fill" : {
+            "solid" : "display-p3:0.00000,0.00000,0.00000,0.00000"
+          },
           "glass" : true,
           "hidden" : false,
           "image-name" : "trophy_black.png",
@@ -74,14 +81,19 @@
           0
         ]
       },
+      "refractivity" : {
+        "depth" : 0,
+        "enabled" : true,
+        "strength" : 0.5
+      },
       "shadow" : {
         "kind" : "layer-color",
-        "opacity" : 0.5
+        "opacity" : 0.08
       },
       "specular" : false,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.44
+        "value" : 0.45
       }
     },
     {
@@ -89,7 +101,14 @@
       "layers" : [
         {
           "image-name" : "stripes.png",
-          "name" : "stripes"
+          "name" : "stripes",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              64,
+              64
+            ]
+          }
         }
       ],
       "position" : {
@@ -99,17 +118,23 @@
           0
         ]
       },
+      "refractivity" : {
+        "depth" : 0,
+        "enabled" : true,
+        "strength" : 0.5
+      },
       "shadow" : {
         "kind" : "layer-color",
         "opacity" : 0.25
       },
-      "specular" : true,
+      "specular" : "inside",
       "translucency" : {
         "enabled" : true,
-        "value" : 0.45
+        "value" : 0.55
       }
     },
     {
+      "hidden" : true,
       "layers" : [
         {
           "glass" : true,

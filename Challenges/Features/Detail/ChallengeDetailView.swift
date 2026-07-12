@@ -11,6 +11,7 @@ struct ChallengeDetailView: View {
     @State private var showLeaveConfirm   = false
     @State private var showEditChallenge  = false
     @State private var selectedParticipant: Participation?
+    @State private var reactionTarget: Participation?
 
     /// Always reads from the ViewModel so live status transitions (pending → active, etc.)
     /// are immediately reflected in the UI without re-navigating.
@@ -61,15 +62,6 @@ struct ChallengeDetailView: View {
                     PointsCardView(participation: me)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
-                }
-
-                // 4. Score history chart — active and completed challenges with data
-                if challenge.status != .pending,
-                   let me = vm.currentUserParticipation,
-                   !me.dailyScores.isEmpty {
-                    ScoreHistoryChart(participation: me, challenge: challenge)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 20)
                 }
 
                 // 5. Pending: lead with the invite so people get in before it starts.
@@ -184,9 +176,11 @@ struct ChallengeDetailView: View {
             ParticipantDetailSheet(
                 participation: p,
                 challenge: challenge,
-                isCurrentUser: p.user.id == session.userID,
-                vm: vm
+                isCurrentUser: p.user.id == session.userID
             )
+        }
+        .sheet(item: $reactionTarget) { p in
+            ReactionPickerSheet(recipient: p, vm: vm)
         }
         .sheet(isPresented: $showEditChallenge) {
             EditChallengeSheet(challenge: vm.challenge) { title, start, end in
@@ -310,6 +304,35 @@ struct ChallengeDetailView: View {
                             if challenge.status != .pending {
                                 Button { selectedParticipant = p } label: { row }
                                     .buttonStyle(.plain)
+                                    .contextMenu {
+                                        // Long-press to react, iMessage-tapback style. The
+                                        // avatar badge on rows teaches the gesture.
+                                        if challenge.status == .active, !isMe,
+                                           vm.currentUserParticipation != nil {
+                                            ControlGroup {
+                                                ForEach(Reaction.allowedEmojis, id: \.self) { emoji in
+                                                    Button {
+                                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                                        Task { await vm.sendReaction(emoji, to: p) }
+                                                    } label: {
+                                                        Text(emoji)
+                                                    }
+                                                }
+                                            }
+                                            .controlGroupStyle(.palette)
+
+                                            Button {
+                                                reactionTarget = p
+                                            } label: {
+                                                Label("More reactions", systemImage: "face.smiling")
+                                            }
+                                        }
+                                        Button {
+                                            selectedParticipant = p
+                                        } label: {
+                                            Label("View stats", systemImage: "chart.bar")
+                                        }
+                                    }
                             } else {
                                 row
                             }
@@ -566,18 +589,64 @@ struct ResultsHeaderCard: View {
     }
 }
 
+// MARK: - Reaction Picker Sheet
+
+/// The full emoji grid behind the context menu's "More reactions".
+private struct ReactionPickerSheet: View {
+    let recipient: Participation
+    let vm: ChallengeDetailViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    private var sentEmoji: String? { vm.myReactionToday(to: recipient.id) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("React to \(recipient.user.displayName)")
+                .font(.headline)
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                ForEach(Reaction.allowedEmojis + Reaction.extendedEmojis, id: \.self) { emoji in
+                    let isSelected = sentEmoji == emoji
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        Task { await vm.sendReaction(emoji, to: recipient) }
+                        dismiss()
+                    } label: {
+                        Text(emoji)
+                            .font(.system(size: 24))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(isSelected ? Color.exerciseRing.opacity(0.18) : Color.cardInset,
+                                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(isSelected ? Color.exerciseRing : .clear, lineWidth: 1.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isSelected ? "\(emoji) sent" : "Send \(emoji)")
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appBackground)
+        .presentationDetents([.height(380)])
+        .presentationDragIndicator(.visible)
+    }
+}
+
 // MARK: - Participant Detail Sheet
 
 /// Tapping a leaderboard row opens this — a participant's rank, total, score history,
 /// and daily breakdown. Reuses the same chart/breakdown components as the hero card.
-private struct ParticipantDetailSheet: View {
+struct ParticipantDetailSheet: View {
     let participation: Participation
     let challenge: Challenge
     let isCurrentUser: Bool
-    /// Enables the reaction bar; nil (e.g. previews) hides it.
-    var vm: ChallengeDetailViewModel? = nil
-    @Environment(\.dismiss) private var dismiss
     @State private var workouts: [WorkoutSummary] = []
+    @State private var detent: PresentationDetent = .large
 
     private var name: String { isCurrentUser ? "You" : participation.user.displayName }
 
@@ -611,85 +680,36 @@ private struct ParticipantDetailSheet: View {
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    header
+        // Maps-style card: grab handle instead of a nav bar and Done button, opens at
+        // medium height and drags up — an overlay, not a new page. Swipe down to dismiss.
+        ScrollView {
+            VStack(spacing: 20) {
+                header
+                    .padding(.top, 8)
 
-                    if canReact {
-                        reactionBar
-                    }
-
-                    if scores.isEmpty {
-                        ContentUnavailableView(
-                            "No activity yet",
-                            systemImage: "figure.run",
-                            description: Text("Scores will appear here once \(isCurrentUser ? "you start" : "they start") earning points.")
-                        )
-                        .padding(.top, 40)
-                    } else {
-                        statsGrid
-                        ScoreHistoryChart(participation: participation, challenge: challenge,
-                                          title: isCurrentUser ? "My Points" : "\(participation.user.displayName)'s Points")
-                    }
-
-                    if !workouts.isEmpty {
-                        workoutsSection
-                    }
+                if scores.isEmpty {
+                    ContentUnavailableView(
+                        "No activity yet",
+                        systemImage: "figure.run",
+                        description: Text("Scores will appear here once \(isCurrentUser ? "you start" : "they start") earning points.")
+                    )
+                    .padding(.top, 40)
+                } else {
+                    statsGrid
+                    ScoreHistoryChart(participation: participation, challenge: challenge,
+                                      title: isCurrentUser ? "My Points" : "\(participation.user.displayName)'s Points")
                 }
-                .padding(16)
-            }
-            .background(Color.appBackground.ignoresSafeArea())
-            .navigationTitle(name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+
+                if !workouts.isEmpty {
+                    workoutsSection
                 }
             }
-            .task { await loadWorkouts() }
+            .padding(16)
         }
-        .presentationDetents([.large])
-    }
-
-    // MARK: Reactions
-
-    private var canReact: Bool {
-        challenge.status == .active && !isCurrentUser && vm?.currentUserParticipation != nil
-    }
-
-    private var sentEmoji: String? {
-        vm?.myReactionToday(to: participation.id)
-    }
-
-    private var reactionBar: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 10) {
-                ForEach(Reaction.allowedEmojis, id: \.self) { emoji in
-                    Button {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        Task { await vm?.sendReaction(emoji, to: participation) }
-                    } label: {
-                        Text(emoji)
-                            .font(.system(size: 22))
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 8)
-                            .background(Color.cardInset, in: Capsule())
-                            .overlay(
-                                Capsule().strokeBorder(
-                                    sentEmoji == emoji ? Color.exerciseRing : .clear,
-                                    lineWidth: 1.5)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            Text(sentEmoji.map { "\($0) sent. Tap another to swap." }
-                 ?? "One reaction per day. Tap another to swap.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
+        .background(Color.appBackground.ignoresSafeArea())
+        .presentationDetents([.medium, .large], selection: $detent)
+        .presentationDragIndicator(.visible)
+        .task { await loadWorkouts() }
     }
 
     // MARK: Workouts
@@ -716,7 +736,10 @@ private struct ParticipantDetailSheet: View {
         HStack(spacing: 14) {
             avatar
             VStack(alignment: .leading, spacing: 3) {
-                Text(name).font(.title2.bold())
+                Text(name)
+                    .font(.title2.bold())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 HStack(spacing: 5) {
                     Image(systemName: participation.hasAppleWatch ? "applewatch" : "iphone")
                         .font(.system(size: 11))
@@ -1124,7 +1147,10 @@ struct ScoreHistoryChart: View {
                         .zIndex(-1)
                         .annotation(
                             position: .top, spacing: 2,
-                            overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                            // Clamp inside the plot on both axes: a leftmost or maxed-out
+                            // bar slides the callout inward instead of overlapping the
+                            // card title above the chart.
+                            overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
                         ) {
                             selectionCallout(sel)
                         }
@@ -1303,11 +1329,26 @@ private enum ChallengeDetailPreviewData {
 }
 
 #Preview("Participant sheet") {
-    ParticipantDetailSheet(
-        participation: ChallengeDetailPreviewData.participation(),
-        challenge: ChallengeDetailPreviewData.challenge(),
-        isCurrentUser: true
-    )
-    .preferredColorScheme(.dark)
+    // Presented as a real sheet so the grab handle and medium detent show.
+    Color.appBackground
+        .ignoresSafeArea()
+        .sheet(isPresented: .constant(true)) {
+            ParticipantDetailSheet(
+                participation: ChallengeDetailPreviewData.participation(),
+                challenge: ChallengeDetailPreviewData.challenge(),
+                isCurrentUser: true
+            )
+        }
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Reaction picker") {
+    let challenge = ChallengeDetailPreviewData.challenge()
+    let vm = ChallengeDetailViewModel(challenge: challenge)
+    return Color.appBackground
+        .sheet(isPresented: .constant(true)) {
+            ReactionPickerSheet(recipient: ChallengeDetailPreviewData.participation(), vm: vm)
+        }
+        .preferredColorScheme(.dark)
 }
 #endif

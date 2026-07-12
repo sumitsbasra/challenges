@@ -77,6 +77,18 @@ struct LeaderboardRowView: View {
                         .foregroundStyle(.white)
                 }
             }
+            // Latest reaction received today, worn on the avatar like an iMessage tapback.
+            .overlay(alignment: .bottomTrailing) {
+                if let latest = reactionEmojis.first {
+                    Text(latest)
+                        .font(.system(size: 10))
+                        .padding(3)
+                        .background(Color.cardInset, in: Circle())
+                        .overlay(Circle().strokeBorder(Color.cardBackground, lineWidth: 1.5))
+                        .offset(x: 5, y: 4)
+                        .accessibilityLabel("Reacted with \(latest)")
+                }
+            }
     }
 
     /// Returns a locally cached UIImage for this participant.
@@ -120,13 +132,6 @@ struct LeaderboardRowView: View {
                 Image(systemName: participation.hasAppleWatch ? "applewatch" : "iphone")
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
-                if !reactionEmojis.isEmpty {
-                    Text(reactionEmojis.prefix(3).joined())
-                        .font(.system(size: 11))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.cardInset, in: Capsule())
-                }
             }
             if todayPts > 0 {
                 Text("+\(Int(todayPts).formatted()) today")

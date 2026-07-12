@@ -17,8 +17,23 @@ struct Reaction: Identifiable, Codable, Hashable {
     var emoji: String
     var createdAt: Date
 
-    /// The reactions a participant can send.
+    /// Quick-send reactions, always visible (iMessage-tapback style).
     static let allowedEmojis = ["🔥", "👏", "😤"]
+
+    /// The expanded picker behind "More reactions". Together with the quick three
+    /// this makes 30 — an even 5 rows in the picker's 6-column grid.
+    static let extendedEmojis = [
+        "💪", "🏃", "🚴", "⚡️", "🎯", "🏆",
+        "🥇", "👑", "🙌", "👀", "😮", "😂",
+        "🤯", "🫡", "🥵", "😅", "😴", "🏋️",
+        "🐢", "🦥", "🛋️", "❤️", "💀", "🚀",
+        "🤝", "🥶", "🍕",
+    ]
+
+    /// True when the emoji is one the app can send.
+    static func isValid(_ emoji: String) -> Bool {
+        allowedEmojis.contains(emoji) || extendedEmojis.contains(emoji)
+    }
 
     static func makeID(fromParticipationID: String, toParticipationID: String,
                        date: Date = Date()) -> String {

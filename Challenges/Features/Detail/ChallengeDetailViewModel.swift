@@ -467,7 +467,7 @@ final class ChallengeDetailViewModel {
     @MainActor
     func sendReaction(_ emoji: String, to recipient: Participation) async {
         guard
-            Reaction.allowedEmojis.contains(emoji),
+            Reaction.isValid(emoji),
             let me = currentUserParticipation,
             me.id != recipient.id
         else { return }

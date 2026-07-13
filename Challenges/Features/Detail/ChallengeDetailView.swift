@@ -108,7 +108,9 @@ struct ChallengeDetailView: View {
         }
         .navigationTitle(vm.challenge.title)
         .navigationBarTitleDisplayMode(.large)
-        .toolbarBackground(Color.appBackground, for: .navigationBar)
+        // No opaque toolbar background: it forces a hard edge under the nav bar and
+        // defeats iOS 26's progressive scroll-edge blur (Settings-style).
+        .softTopScrollEdge()
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 // Share button
@@ -389,6 +391,24 @@ struct ChallengeDetailView: View {
                                             reactionOverlayTarget = p
                                         }
                                     }
+                                    // The row stopped being a Button when the tapback
+                                    // gesture arrived; restore its button semantics and
+                                    // give VoiceOver a path to reactions, since a custom
+                                    // long-press overlay is invisible to it.
+                                    .accessibilityElement(children: .combine)
+                                    .accessibilityAddTraits(.isButton)
+                                    .accessibilityHint("Shows their stats.")
+                                    .accessibilityActions {
+                                        if challenge.status == .active, !isMe,
+                                           vm.currentUserParticipation != nil {
+                                            ForEach(Reaction.allowedEmojis, id: \.self) { emoji in
+                                                Button("React \(emoji)") {
+                                                    Task { await vm.sendReaction(emoji, to: p) }
+                                                }
+                                            }
+                                            Button("More reactions") { reactionTarget = p }
+                                        }
+                                    }
                             } else {
                                 row
                             }
@@ -647,6 +667,19 @@ struct ResultsHeaderCard: View {
 
 // MARK: - Reaction Picker Sheet
 
+extension View {
+    /// iOS 26's progressive blur under the navigation bar (the Settings look) instead
+    /// of a hard edge; earlier OS versions keep the standard system material bar.
+    @ViewBuilder
+    func softTopScrollEdge() -> some View {
+        if #available(iOS 26.0, *) {
+            scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            self
+        }
+    }
+}
+
 /// Frames of the leaderboard rows in the "challengePage" coordinate space, used to
 /// anchor the reaction tapback overlay to the pressed row.
 private struct RowFrameKey: PreferenceKey {
@@ -672,6 +705,18 @@ struct ReactionTapbackBar: View {
     }
 
     var body: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                // Liquid Glass, matching the system chrome around it.
+                barContent.glassEffect(.regular.interactive(), in: Capsule())
+            } else {
+                barContent.background(.regularMaterial, in: Capsule())
+            }
+        }
+        .shadow(color: .black.opacity(0.3), radius: 14, y: 5)
+    }
+
+    private var barContent: some View {
         HStack(spacing: 2) {
             ForEach(emojis, id: \.self) { emoji in
                 Button { onSelect(emoji) } label: {
@@ -694,15 +739,15 @@ struct ReactionTapbackBar: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 36, height: 36)
                     .background(Circle().fill(.white.opacity(0.09)))
+                    // 44pt minimum hit target (HIG) around the 36pt visual.
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .padding(.leading, 4)
             .accessibilityLabel("More reactions")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(.regularMaterial, in: Capsule())
-        .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
     }
 }
 

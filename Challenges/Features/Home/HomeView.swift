@@ -44,7 +44,7 @@ struct HomeView: View {
             }
             .navigationTitle(dateTitle)
             .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(Color.appBackground, for: .navigationBar)
+            .softTopScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     profileButton

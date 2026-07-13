@@ -44,27 +44,44 @@ struct ActivityRingView: View {
 
     private var capped: Double { min(animatedProgress, 1.0) }
 
-    /// How far the ring has gone past 100% (the second lap). Once the ring is full we keep
-    /// a small minimum overlap so the leading tip covers the 12 o'clock join — otherwise a
-    /// full ring's gradient collides there and shows a hard flat edge.
+    /// Whole laps stacked beneath the partial top lap once the ring passes 100%.
+    private var lapsBelow: Double {
+        guard animatedProgress >= 1.0 else { return 0 }
+        return max(1, animatedProgress.rounded(.down))
+    }
+
+    /// The top lap's arc: the FRACTIONAL part of progress, so the tip keeps moving at
+    /// 200%, 300%, … instead of parking at 12 o'clock (where its shadow hides under the
+    /// lap and the ring reads as a flat donut). A small minimum overlap keeps the
+    /// 12 o'clock join covered right at whole-lap boundaries.
     private var over: Double {
         guard animatedProgress >= 1.0 else { return 0 }
-        return min(max(animatedProgress - 1.0, 0.04), 0.9999)
+        let fraction = animatedProgress.truncatingRemainder(dividingBy: 1.0)
+        return min(max(fraction, 0.04), 0.9999)
     }
 
-    /// Color at the 12 o'clock wrap point — the shade where the first lap ends and the
-    /// second lap begins. Making both laps meet at this exact shade keeps the wrap
-    /// seamless, with the brightest reserved for the true leading tip.
+    /// Shade at the 12 o'clock wrap where the top lap begins — the deeper into the laps,
+    /// the closer to the bright leading shade, so each lap boundary hands off seamlessly
+    /// while the true tip stays brightest.
     private var wrapShade: Color {
         guard animatedProgress > 1 else { return color }
-        return color.blended(to: color.ringLeadingShade, fraction: 1.0 / animatedProgress)
+        return color.blended(to: color.ringLeadingShade, fraction: lapsBelow / animatedProgress)
     }
 
-    /// First-lap fill (tail → wrap). When there's no second lap it runs all the way to the
-    /// bright leading shade; when overlapped it stops at `wrapShade` so the wrap matches.
+    /// Start shade of the topmost FULL lap drawn beneath the partial lap. Matching the
+    /// lap-by-lap shades means crossing a whole-lap boundary mid-animation repaints the
+    /// base with exactly the colors the finishing lap already showed — no pop.
+    private var underStartShade: Color {
+        guard animatedProgress > 1 else { return color }
+        return color.blended(to: color.ringLeadingShade, fraction: (lapsBelow - 1) / animatedProgress)
+    }
+
+    /// Base fill (tail → wrap). Under 100% it runs tail color to the bright leading
+    /// shade; once lapped it shows the topmost full lap's gradient beneath the tip lap.
     private var firstLapGradient: AngularGradient {
         AngularGradient(
-            gradient: Gradient(colors: [color, over > 0 ? wrapShade : color.ringLeadingShade]),
+            gradient: Gradient(colors: [over > 0 ? underStartShade : color,
+                                        over > 0 ? wrapShade : color.ringLeadingShade]),
             center: .center,
             startAngle: .degrees(0),
             endAngle: .degrees(360 * max(capped, 0.0001))

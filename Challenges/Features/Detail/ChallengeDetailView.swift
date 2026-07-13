@@ -12,6 +12,10 @@ struct ChallengeDetailView: View {
     @State private var showEditChallenge  = false
     @State private var selectedParticipant: Participation?
     @State private var reactionTarget: Participation?
+    /// Row currently showing the tapback bar (long-press).
+    @State private var reactionOverlayTarget: Participation?
+    /// Leaderboard row frames in the "challengePage" space, for anchoring the tapback bar.
+    @State private var rowFrames: [String: CGRect] = [:]
 
     /// Always reads from the ViewModel so live status transitions (pending → active, etc.)
     /// are immediately reflected in the UI without re-navigating.
@@ -84,6 +88,9 @@ struct ChallengeDetailView: View {
             }
         }
         .background(Color.appBackground.ignoresSafeArea())
+        .coordinateSpace(name: "challengePage")
+        .onPreferenceChange(RowFrameKey.self) { rowFrames = $0 }
+        .overlay { reactionTapbackOverlay }
         .overlay(alignment: .bottom) {
             if let error = vm.error {
                 Text(error)
@@ -118,6 +125,16 @@ struct ChallengeDetailView: View {
 
                 // … menu
                 Menu {
+                    // Manual escape hatch for stale data. The page has no pull-to-refresh:
+                    // a refreshable action leaks into every presented sheet through the
+                    // (read-only) environment, breaking the cards' swipe-to-dismiss.
+                    // Auto-sync on open/foreground/push covers the normal cases.
+                    Button {
+                        Task { await vm.refresh() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+
                     if challenge.creatorID == (session.userID ?? "") {
                         Button {
                             showEditChallenge = true
@@ -196,7 +213,6 @@ struct ChallengeDetailView: View {
         .task { await vm.load() }
         .task { await vm.loadReactions() }
         .task { await vm.loadGroupWorkouts() }
-        .refreshable { await vm.refresh() }
         // Re-sync when the app returns to the foreground. The Apple Watch batches
         // activity summaries and may not have pushed them to the iPhone HealthKit
         // store when the detail first loaded. This picks up past-day scores that
@@ -227,6 +243,59 @@ struct ChallengeDetailView: View {
             activity.userInfo = ["challengeID": challenge.id, "rank": rank]
             activity.suggestedInvocationPhrase = "My rank in \(challenge.title)"
             activity.becomeCurrent()
+        }
+    }
+
+    // MARK: - Reaction tapback overlay
+
+    /// iMessage-style tapback: dim the page, lift the pressed row, float a material
+    /// capsule of reactions above it.
+    @ViewBuilder
+    private var reactionTapbackOverlay: some View {
+        if let p = reactionOverlayTarget, let frame = rowFrames[p.id] {
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                    .fill(.black.opacity(0.45))
+                    .ignoresSafeArea()
+                    .onTapGesture { dismissReactionOverlay() }
+
+                // Lifted copy of the pressed row.
+                LeaderboardRowView(
+                    participation: p,
+                    isCurrentUser: false,
+                    showRank: true,
+                    reactionEmojis: vm.todaysReactionsByParticipation[p.id] ?? []
+                )
+                .frame(width: frame.width, height: frame.height)
+                .background(Color.cardInset)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: .black.opacity(0.4), radius: 20, y: 8)
+                .position(x: frame.midX, y: frame.midY)
+
+                ReactionTapbackBar(
+                    sentEmoji: vm.myReactionToday(to: p.id),
+                    onSelect: { emoji in
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        Task { await vm.sendReaction(emoji, to: p) }
+                        dismissReactionOverlay()
+                    },
+                    onMore: {
+                        dismissReactionOverlay()
+                        reactionTarget = p
+                    }
+                )
+                .offset(x: max(12, frame.minX + 8),
+                        // Above the row; below it when the row sits too close to the top.
+                        y: frame.minY < 130 ? frame.maxY + 10 : frame.minY - 66)
+                .transition(.scale(scale: 0.5, anchor: .bottomLeading).combined(with: .opacity))
+            }
+            .transition(.opacity)
+        }
+    }
+
+    private func dismissReactionOverlay() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            reactionOverlayTarget = nil
         }
     }
 
@@ -299,38 +368,25 @@ struct ChallengeDetailView: View {
                                 showRank: challenge.status != .pending,
                                 reactionEmojis: vm.todaysReactionsByParticipation[p.id] ?? []
                             )
-                            // Tap a participant to see their score breakdown — only once
-                            // there are scores to show (active/completed, not pending).
+                            // Tap a participant for their score breakdown; long-press to
+                            // react with the custom tapback bar (active challenges,
+                            // other participants only). The avatar badge teaches the hold.
                             if challenge.status != .pending {
-                                Button { selectedParticipant = p } label: { row }
-                                    .buttonStyle(.plain)
-                                    .contextMenu {
-                                        // Long-press to react, iMessage-tapback style. The
-                                        // avatar badge on rows teaches the gesture.
-                                        if challenge.status == .active, !isMe,
-                                           vm.currentUserParticipation != nil {
-                                            ControlGroup {
-                                                ForEach(Reaction.allowedEmojis, id: \.self) { emoji in
-                                                    Button {
-                                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                                        Task { await vm.sendReaction(emoji, to: p) }
-                                                    } label: {
-                                                        Text(emoji)
-                                                    }
-                                                }
-                                            }
-                                            .controlGroupStyle(.palette)
-
-                                            Button {
-                                                reactionTarget = p
-                                            } label: {
-                                                Label("More reactions", systemImage: "face.smiling")
-                                            }
-                                        }
-                                        Button {
-                                            selectedParticipant = p
-                                        } label: {
-                                            Label("View stats", systemImage: "chart.bar")
+                                row
+                                    .contentShape(Rectangle())
+                                    .background(GeometryReader { geo in
+                                        Color.clear.preference(
+                                            key: RowFrameKey.self,
+                                            value: [p.id: geo.frame(in: .named("challengePage"))]
+                                        )
+                                    })
+                                    .onTapGesture { selectedParticipant = p }
+                                    .onLongPressGesture(minimumDuration: 0.3) {
+                                        guard challenge.status == .active, !isMe,
+                                              vm.currentUserParticipation != nil else { return }
+                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                        withAnimation(.spring(response: 0.32, dampingFraction: 0.75)) {
+                                            reactionOverlayTarget = p
                                         }
                                     }
                             } else {
@@ -591,7 +647,66 @@ struct ResultsHeaderCard: View {
 
 // MARK: - Reaction Picker Sheet
 
-/// The full emoji grid behind the context menu's "More reactions".
+/// Frames of the leaderboard rows in the "challengePage" coordinate space, used to
+/// anchor the reaction tapback overlay to the pressed row.
+private struct RowFrameKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
+/// The floating capsule of quick reactions shown over a long-pressed leaderboard row.
+struct ReactionTapbackBar: View {
+    let sentEmoji: String?
+    let onSelect: (String) -> Void
+    let onMore: () -> Void
+
+    /// Quick three, plus the already-sent emoji when it came from the full picker.
+    private var emojis: [String] {
+        var list = Reaction.allowedEmojis
+        if let sentEmoji, !list.contains(sentEmoji) {
+            list.append(sentEmoji)
+        }
+        return list
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(emojis, id: \.self) { emoji in
+                Button { onSelect(emoji) } label: {
+                    Text(emoji)
+                        .font(.system(size: 26))
+                        .frame(width: 44, height: 44)
+                        .background {
+                            if sentEmoji == emoji {
+                                Circle().fill(Color.exerciseRing.opacity(0.28))
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(sentEmoji == emoji ? "\(emoji) sent" : "Send \(emoji)")
+            }
+
+            Button(action: onMore) {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(.white.opacity(0.09)))
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 4)
+            .accessibilityLabel("More reactions")
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(.regularMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
+    }
+}
+
+/// The full emoji grid behind the tapback bar's "+" button.
 private struct ReactionPickerSheet: View {
     let recipient: Participation
     let vm: ChallengeDetailViewModel
@@ -646,7 +761,6 @@ struct ParticipantDetailSheet: View {
     let challenge: Challenge
     let isCurrentUser: Bool
     @State private var workouts: [WorkoutSummary] = []
-    @State private var detent: PresentationDetent = .large
 
     private var name: String { isCurrentUser ? "You" : participation.user.displayName }
 
@@ -707,7 +821,8 @@ struct ParticipantDetailSheet: View {
             .padding(16)
         }
         .background(Color.appBackground.ignoresSafeArea())
-        .presentationDetents([.medium, .large], selection: $detent)
+        // Single detent: one downward swipe dismisses instead of parking at half height.
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .task { await loadWorkouts() }
     }
@@ -1166,10 +1281,14 @@ struct ScoreHistoryChart: View {
                 AxisMarks(values: .stride(by: .day)) { value in
                     if let date = value.as(Date.self) {
                         // Weekday labels like Apple Health's weekly view; the selection
-                        // callout carries the exact date.
-                        AxisValueLabel(date.formatted(.dateTime.weekday(.abbreviated)), centered: true)
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color.secondary)
+                        // callout carries the exact date. The explicit standard anchor
+                        // avoids Charts' "custom UnitPoint not supported" runtime warning
+                        // that `centered` alone triggers.
+                        AxisValueLabel(centered: true, anchor: .top) {
+                            Text(date.formatted(.dateTime.weekday(.abbreviated)))
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.secondary)
+                        }
                     }
                 }
             }

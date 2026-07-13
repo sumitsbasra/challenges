@@ -115,6 +115,13 @@ final class ChallengeDetailViewModel {
         if let cached = ParticipationCache.load(challengeID: challenge.id) {
             participations = cached
             isLoading = false
+            // Fill today's rings from local HealthKit right away. The CloudKit sync
+            // below takes seconds, and the cache only carries the previous session's
+            // rings — without this, "Today's Activity" sits at zero until the full
+            // sync finishes. fetchAndUpdate re-runs the overlay afterwards.
+            if challenge.status == .active {
+                await overlayLiveHealthKitData()
+            }
         } else {
             isLoading = true
         }
@@ -276,7 +283,7 @@ final class ChallengeDetailViewModel {
                 if ck?.code == .networkUnavailable || ck?.code == .networkFailure {
                     self.error = "No internet connection."
                 } else {
-                    self.error = "Couldn't load. Pull down to try again."
+                    self.error = "Couldn't load. Refresh from the ••• menu."
                 }
             }
         }
@@ -557,7 +564,7 @@ final class ChallengeDetailViewModel {
             // and let the next refresh/push retry silently.
             Logger.cloudKit.error("loadLeaderboard failed: code=\((error as? CKError)?.code.rawValue ?? -1, privacy: .public) \(error.localizedDescription, privacy: .public)")
             if rankedParticipations.isEmpty {
-                self.error = "Couldn't load leaderboard. Pull down to try again."
+                self.error = "Couldn't load the leaderboard. Refresh from the ••• menu."
             }
         }
     }
@@ -660,7 +667,7 @@ final class ChallengeDetailViewModel {
             }
             lastFetchDate = Date()
         } catch {
-            self.error = "Couldn't refresh scores. Pull down to try again."
+            self.error = "Couldn't refresh scores. Try Refresh from the ••• menu."
         }
     }
 }

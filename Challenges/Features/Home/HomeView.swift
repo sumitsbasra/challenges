@@ -27,6 +27,15 @@ struct HomeView: View {
                 Color.appBackground.ignoresSafeArea()
 
                 scrollContent
+                    // Scoped to the home scroll view only. On the NavigationStack the
+                    // refresh action leaks into every pushed page and presented sheet
+                    // (the environment key is read-only, so they can't opt out).
+                    .refreshable {
+                        guard let userID = session.userID else { return }
+                        await vm.load(userID: userID)
+                        let synced = await SyncCoordinator.shared.syncCurrentChallenges()
+                        vm.applySyncedScores(synced)
+                    }
 
                 // Floating action button
                 fab
@@ -90,12 +99,6 @@ struct HomeView: View {
             // Pending challenges included so join pushes arrive before the start date.
             let subscribableIDs = vm.allChallenges.filter { $0.status != .completed }.map { $0.id }
             await CloudKitManager.shared.registerSubscriptions(forChallengeIDs: subscribableIDs)
-        }
-        .refreshable {
-            guard let userID = session.userID else { return }
-            await vm.load(userID: userID)
-            let synced = await SyncCoordinator.shared.syncCurrentChallenges()
-            vm.applySyncedScores(synced)
         }
         .tint(.white)
         .onOpenURL { url in

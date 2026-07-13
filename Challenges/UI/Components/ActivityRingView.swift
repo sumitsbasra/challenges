@@ -64,7 +64,9 @@ struct ActivityRingView: View {
     /// the closer to the bright leading shade, so each lap boundary hands off seamlessly
     /// while the true tip stays brightest.
     private var wrapShade: Color {
-        guard animatedProgress > 1 else { return color }
+        // >= 1: at exactly 100% the wrap must be the leading shade, otherwise the base
+        // renders flat and the tip pops in as a bright dot against it.
+        guard animatedProgress >= 1 else { return color }
         return color.blended(to: color.ringLeadingShade, fraction: lapsBelow / animatedProgress)
     }
 
@@ -72,7 +74,7 @@ struct ActivityRingView: View {
     /// lap-by-lap shades means crossing a whole-lap boundary mid-animation repaints the
     /// base with exactly the colors the finishing lap already showed — no pop.
     private var underStartShade: Color {
-        guard animatedProgress > 1 else { return color }
+        guard animatedProgress >= 1 else { return color }
         return color.blended(to: color.ringLeadingShade, fraction: (lapsBelow - 1) / animatedProgress)
     }
 

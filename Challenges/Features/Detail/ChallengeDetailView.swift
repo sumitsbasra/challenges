@@ -1095,6 +1095,7 @@ private struct EditChallengeSheet: View {
             .scrollContentBackground(.hidden)
             .background(Color.appBackground)
             .navigationTitle("Edit Challenge")
+            .softTopScrollEdge()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

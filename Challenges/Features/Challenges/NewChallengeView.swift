@@ -65,7 +65,7 @@ struct NewChallengeView: View {
             .animation(.easeInOut(duration: 0.35), value: createdChallenge == nil)
             .navigationTitle(mode == .create ? "New Challenge" : "Join Challenge")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color.appBackground, for: .navigationBar)
+            .softTopScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if createdChallenge == nil {

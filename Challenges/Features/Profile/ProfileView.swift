@@ -94,6 +94,7 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
+            .softTopScrollEdge()
         }
         .presentationDragIndicator(.visible)
         .onAppear {
@@ -237,6 +238,7 @@ struct DataSourceView: View {
         }
         .navigationTitle("Data Source")
         .navigationBarTitleDisplayMode(.inline)
+        .softTopScrollEdge()
     }
 }
 
@@ -310,6 +312,7 @@ struct NotificationSettingsView: View {
         }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
+        .softTopScrollEdge()
         .task { await refreshStatus() }
         // Reschedule whenever any preference changes so the pending queue stays in sync.
         .onChange(of: challengeStarting) { _, _ in rescheduleFromPrefs() }

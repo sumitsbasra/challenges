@@ -67,6 +67,7 @@ struct HealthPermissionsView: View {
             }
         }
         .navigationTitle("Health Permissions")
+        .softTopScrollEdge()
         .onAppear { hk.updateAuthorizationStatus() }
         .alert("Permission Error", isPresented: Binding(
             get: { requestError != nil },

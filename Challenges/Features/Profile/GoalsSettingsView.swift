@@ -42,6 +42,7 @@ struct GoalsSettingsView: View {
             }
             .navigationTitle("My Goals")
             .navigationBarTitleDisplayMode(.inline)
+            .softTopScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {

@@ -67,6 +67,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         BackgroundTaskScheduler.registerTasks()
         UNUserNotificationCenter.current().delegate = self
+        // Obtain an APNs token. Without this, CloudKit subscription pushes (score
+        // updates, reactions, joins) are never delivered to the device at all —
+        // the subscriptions exist server-side but APNs has no destination. Silent
+        // pushes need no user permission, so this never shows a prompt.
+        application.registerForRemoteNotifications()
         // Register App Shortcuts with Siri. Must be called on every launch so
         // iOS keeps the phrase list current. Without this call the shortcuts
         // exist in code but are never surfaced in Siri or the Shortcuts app.

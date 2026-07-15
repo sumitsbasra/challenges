@@ -42,12 +42,54 @@ struct ActivityRingView: View {
 
     @State private var animatedProgress: Double = 0
 
-    private var capped: Double { min(animatedProgress, 1.0) }
+    var body: some View {
+        GeometryReader { geo in
+            RingArcs(progress: animatedProgress, color: color, lineWidth: lineWidth, size: geo.size)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .onAppear {
+            withAnimation(.interpolatingSpring(stiffness: 42, damping: 10).delay(0.05)) {
+                animatedProgress = progress
+            }
+        }
+        .onChange(of: progress) { _, newValue in
+            withAnimation(.spring(response: 0.75, dampingFraction: 0.82)) {
+                animatedProgress = newValue
+            }
+        }
+    }
+}
+
+/// Pure, `Animatable` rendering of one ring's arcs at a given progress.
+///
+/// Conforming to `Animatable` (rather than reading `progress` as a plain computed
+/// property elsewhere) makes SwiftUI re-run this `body` at every interpolated frame
+/// of the enclosing `withAnimation` transaction, not just once at the start and once
+/// at the end. That matters here because `.trim(from:to:)` animates smoothly on its
+/// own, but `AngularGradient` does not — its color stops snap straight to whatever
+/// the latest state produces. Before this split, the gradient (and therefore the
+/// bright "tip" color and the second-lap tip/shadow, all derived from the same
+/// `animatedProgress`) jumped to its FINAL configuration immediately while only the
+/// trimmed arc length grew — so the ring's end-state tip color was visible from
+/// frame one, with the fill just growing to reveal it. Driving everything through
+/// one Animatable value keeps trim, gradients, and tip position in lockstep.
+private struct RingArcs: View, Animatable {
+    var progress: Double
+    let color: Color
+    let lineWidth: CGFloat
+    let size: CGSize
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    private var capped: Double { min(progress, 1.0) }
 
     /// Whole laps stacked beneath the partial top lap once the ring passes 100%.
     private var lapsBelow: Double {
-        guard animatedProgress >= 1.0 else { return 0 }
-        return max(1, animatedProgress.rounded(.down))
+        guard progress >= 1.0 else { return 0 }
+        return max(1, progress.rounded(.down))
     }
 
     /// The top lap's arc: the FRACTIONAL part of progress, so the tip keeps moving at
@@ -55,8 +97,8 @@ struct ActivityRingView: View {
     /// lap and the ring reads as a flat donut). A small minimum overlap keeps the
     /// 12 o'clock join covered right at whole-lap boundaries.
     private var over: Double {
-        guard animatedProgress >= 1.0 else { return 0 }
-        let fraction = animatedProgress.truncatingRemainder(dividingBy: 1.0)
+        guard progress >= 1.0 else { return 0 }
+        let fraction = progress.truncatingRemainder(dividingBy: 1.0)
         return min(max(fraction, 0.04), 0.9999)
     }
 
@@ -66,16 +108,16 @@ struct ActivityRingView: View {
     private var wrapShade: Color {
         // >= 1: at exactly 100% the wrap must be the leading shade, otherwise the base
         // renders flat and the tip pops in as a bright dot against it.
-        guard animatedProgress >= 1 else { return color }
-        return color.blended(to: color.ringLeadingShade, fraction: lapsBelow / animatedProgress)
+        guard progress >= 1 else { return color }
+        return color.blended(to: color.ringLeadingShade, fraction: lapsBelow / progress)
     }
 
     /// Start shade of the topmost FULL lap drawn beneath the partial lap. Matching the
     /// lap-by-lap shades means crossing a whole-lap boundary mid-animation repaints the
     /// base with exactly the colors the finishing lap already showed — no pop.
     private var underStartShade: Color {
-        guard animatedProgress >= 1 else { return color }
-        return color.blended(to: color.ringLeadingShade, fraction: (lapsBelow - 1) / animatedProgress)
+        guard progress >= 1 else { return color }
+        return color.blended(to: color.ringLeadingShade, fraction: (lapsBelow - 1) / progress)
     }
 
     /// Base fill (tail → wrap). Under 100% it runs tail color to the bright leading
@@ -102,95 +144,82 @@ struct ActivityRingView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            let radius = min(geo.size.width, geo.size.height) / 2
-            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+        let radius = min(size.width, size.height) / 2
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
 
-            ZStack {
-                // Dim track.
-                Circle().stroke(color.opacity(0.18), lineWidth: lineWidth)
+        ZStack {
+            // Dim track.
+            Circle().stroke(color.opacity(0.18), lineWidth: lineWidth)
 
-                // First lap.
+            // First lap.
+            Circle()
+                .trim(from: 0, to: capped)
+                .stroke(firstLapGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+
+            // Second lap (over 100%), stacked on top.
+            if over > 0 {
+                // The first lap's angular gradient wraps hard at 12 o'clock (base
+                // shade meets wrapShade), and the second lap's antialiased start edge
+                // lets a hairline of that dark wrap bleed through. A short solid arc
+                // in the shared wrap shade straddles 12 o'clock beneath the seam so
+                // both sides of the butt edge sit on identical paint.
                 Circle()
-                    .trim(from: 0, to: capped)
-                    .stroke(firstLapGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .trim(from: 0, to: 0.016)
+                    .stroke(wrapShade, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+                    .rotationEffect(.degrees(-90 - 0.008 * 360))
+
+                // Soft shadow just AHEAD of the leading tip (along the direction of
+                // travel), drawn BENEATH the second lap. "Ahead" is always the exposed
+                // first-lap surface the second lap hasn't reached yet, so the shadow is
+                // visible for every tip position — a fixed downward offset would slip
+                // under the lap when the tip is on the left. It's a dark blur, not a
+                // bright shape, so nothing reads as a circle, and the start stays clean.
+                Circle()
+                    .fill(Color.black.opacity(0.7))
+                    .frame(width: lineWidth * 0.9, height: lineWidth * 0.9)
+                    .blur(radius: lineWidth * 0.14)
+                    .position(tipPoint(for: over, center: center, radius: radius,
+                                       ahead: lineWidth * 0.28))
+
+                // Butt start cap: a round cap would protrude half a line-width
+                // BACKWARDS past 12 o'clock onto the exposed first lap, and its curved
+                // silhouette shows against the tip shadow once the tip gets close to
+                // the start (progress near 200%). A butt edge lands exactly on the
+                // 12 o'clock join, where both laps are the same shade — invisible.
+                Circle()
+                    .trim(from: 0, to: over)
+                    .stroke(secondLapGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
                     .rotationEffect(.degrees(-90))
 
-                // Second lap (over 100%), stacked on top.
-                if over > 0 {
-                    // The first lap's angular gradient wraps hard at 12 o'clock (base
-                    // shade meets wrapShade), and the second lap's antialiased start edge
-                    // lets a hairline of that dark wrap bleed through. A short solid arc
-                    // in the shared wrap shade straddles 12 o'clock beneath the seam so
-                    // both sides of the butt edge sit on identical paint.
-                    Circle()
-                        .trim(from: 0, to: 0.016)
-                        .stroke(wrapShade, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
-                        .rotationEffect(.degrees(-90 - 0.008 * 360))
-
-                    // Soft shadow just AHEAD of the leading tip (along the direction of
-                    // travel), drawn BENEATH the second lap. "Ahead" is always the exposed
-                    // first-lap surface the second lap hasn't reached yet, so the shadow is
-                    // visible for every tip position — a fixed downward offset would slip
-                    // under the lap when the tip is on the left. It's a dark blur, not a
-                    // bright shape, so nothing reads as a circle, and the start stays clean.
-                    Circle()
-                        .fill(Color.black.opacity(0.7))
-                        .frame(width: lineWidth * 0.9, height: lineWidth * 0.9)
-                        .blur(radius: lineWidth * 0.14)
-                        .position(tipPoint(for: over, center: center, radius: radius,
-                                           ahead: lineWidth * 0.28))
-
-                    // Butt start cap: a round cap would protrude half a line-width
-                    // BACKWARDS past 12 o'clock onto the exposed first lap, and its curved
-                    // silhouette shows against the tip shadow once the tip gets close to
-                    // the start (progress near 200%). A butt edge lands exactly on the
-                    // 12 o'clock join, where both laps are the same shade — invisible.
-                    Circle()
-                        .trim(from: 0, to: over)
-                        .stroke(secondLapGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
-                        .rotationEffect(.degrees(-90))
-
-                    // Rounded leading tip, restored as a dot over the butt end.
-                    Circle()
-                        .fill(color.ringLeadingShade)
-                        .frame(width: lineWidth, height: lineWidth)
-                        .position(tipPoint(for: over, center: center, radius: radius, ahead: 0))
-                }
-
-                // Cross-width sheen: a whisper of convex shading so the band reads as a
-                // gently rounded tube without dulling the color. No inner-edge darkening
-                // (keeps colors vivid edge-to-edge); just a soft center highlight and a
-                // faint outer edge. Both laps share the radius, so one overlay covers
-                // whichever is on top; trimmed to the drawn arc so the track stays flat.
+                // Rounded leading tip, restored as a dot over the butt end.
                 Circle()
-                    .trim(from: 0, to: capped)
-                    .stroke(
-                        RadialGradient(
-                            gradient: Gradient(stops: [
-                                .init(color: .clear,               location: 0.0),
-                                .init(color: .white.opacity(0.06), location: 0.6),   // barely-there center highlight
-                                .init(color: .black.opacity(0.04), location: 1.0),   // whisper of an outer edge
-                            ]),
-                            center: .center,
-                            startRadius: radius - lineWidth / 2,
-                            endRadius: radius + lineWidth / 2
-                        ),
-                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
+                    .fill(color.ringLeadingShade)
+                    .frame(width: lineWidth, height: lineWidth)
+                    .position(tipPoint(for: over, center: center, radius: radius, ahead: 0))
             }
-            .frame(width: geo.size.width, height: geo.size.height)
-        }
-        .onAppear {
-            withAnimation(.interpolatingSpring(stiffness: 42, damping: 10).delay(0.05)) {
-                animatedProgress = progress
-            }
-        }
-        .onChange(of: progress) { _, newValue in
-            withAnimation(.spring(response: 0.75, dampingFraction: 0.82)) {
-                animatedProgress = newValue
-            }
+
+            // Cross-width sheen: a whisper of convex shading so the band reads as a
+            // gently rounded tube without dulling the color. No inner-edge darkening
+            // (keeps colors vivid edge-to-edge); just a soft center highlight and a
+            // faint outer edge. Both laps share the radius, so one overlay covers
+            // whichever is on top; trimmed to the drawn arc so the track stays flat.
+            Circle()
+                .trim(from: 0, to: capped)
+                .stroke(
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .clear,               location: 0.0),
+                            .init(color: .white.opacity(0.06), location: 0.6),   // barely-there center highlight
+                            .init(color: .black.opacity(0.04), location: 1.0),   // whisper of an outer edge
+                        ]),
+                        center: .center,
+                        startRadius: radius - lineWidth / 2,
+                        endRadius: radius + lineWidth / 2
+                    ),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
         }
     }
 

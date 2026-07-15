@@ -1302,19 +1302,31 @@ struct ScoreHistoryChart: View {
                 }
 
                 if let sel = selectedEntry {
+                    // Dimmed vertical guide, pushed BEHIND the bars (zIndex -1) so it
+                    // doesn't draw a stripe across the highlighted bar.
                     RuleMark(x: .value("Selected", sel.day, unit: .day))
                         .foregroundStyle(Color.secondary.opacity(0.35))
                         .lineStyle(StrokeStyle(lineWidth: 1))
                         .zIndex(-1)
-                        .annotation(
-                            position: .top, spacing: 2,
-                            // Clamp inside the plot on both axes: a leftmost or maxed-out
-                            // bar slides the callout inward instead of overlapping the
-                            // card title above the chart.
-                            overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
-                        ) {
-                            selectionCallout(sel)
-                        }
+
+                    // The callout itself lives on a separate, invisible mark with the
+                    // default (unindexed) z-order — Swift Charts ties an annotation's
+                    // z-order to its own mark, so attaching it to the de-indexed
+                    // RuleMark above was drawing the callout behind the bars too.
+                    PointMark(
+                        x: .value("Selected", sel.day, unit: .day),
+                        y: .value("Points", sel.points)
+                    )
+                    .opacity(0)
+                    .annotation(
+                        position: .top, spacing: 2,
+                        // Clamp inside the plot on both axes: a leftmost or maxed-out
+                        // bar slides the callout inward instead of overlapping the
+                        // card title above the chart.
+                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                    ) {
+                        selectionCallout(sel)
+                    }
                 }
             }
             .chartScrollableAxes(.horizontal)

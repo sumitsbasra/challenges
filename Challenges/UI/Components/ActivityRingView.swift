@@ -48,12 +48,17 @@ struct ActivityRingView: View {
                 .frame(width: geo.size.width, height: geo.size.height)
         }
         .onAppear {
-            withAnimation(.interpolatingSpring(stiffness: 42, damping: 10).delay(0.05)) {
+            // dampingFraction 1 = critically damped: reaches progress and stops,
+            // no overshoot/settle-back. (The previous underdamped spring's bounce
+            // was masked by the gradient-desync bug fixed above; once the ring
+            // tracked correctly frame-to-frame, the overshoot read as a glitch
+            // rather than a bounce.)
+            withAnimation(.spring(response: 0.7, dampingFraction: 1).delay(0.05)) {
                 animatedProgress = progress
             }
         }
         .onChange(of: progress) { _, newValue in
-            withAnimation(.spring(response: 0.75, dampingFraction: 0.82)) {
+            withAnimation(.spring(response: 0.6, dampingFraction: 1)) {
                 animatedProgress = newValue
             }
         }

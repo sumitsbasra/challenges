@@ -1,6 +1,19 @@
 import XCTest
 @testable import Challenges
 
+/// Whole-lap rings rest with their tip parked 0.04 laps past 12 o'clock (so the
+/// overlap shadow reads); that pose is baked into the animation target so the tip
+/// sweeps through 12 o'clock smoothly instead of snapping on the final frame.
+final class ActivityRingRestPoseTests: XCTestCase {
+    func testRestPoseMapping() {
+        XCTAssertEqual(ActivityRingView.restPose(for: 0.97), 0.97)   // under 100%: untouched
+        XCTAssertEqual(ActivityRingView.restPose(for: 1.0), 1.04)    // whole laps park past 12
+        XCTAssertEqual(ActivityRingView.restPose(for: 1.02), 1.04)   // hair past: same pose
+        XCTAssertEqual(ActivityRingView.restPose(for: 1.3), 1.3)     // clear of the join: untouched
+        XCTAssertEqual(ActivityRingView.restPose(for: 3.0), 3.04)
+    }
+}
+
 final class DailyScoreTests: XCTestCase {
 
     // Timezones at the extremes: UTC+12/13 (Auckland), UTC+14 (Kiritimati),

@@ -54,14 +54,26 @@ struct ActivityRingView: View {
             // tracked correctly frame-to-frame, the overshoot read as a glitch
             // rather than a bounce.)
             withAnimation(.spring(response: 0.7, dampingFraction: 1).delay(0.05)) {
-                animatedProgress = progress
+                animatedProgress = Self.restPose(for: progress)
             }
         }
         .onChange(of: progress) { _, newValue in
             withAnimation(.spring(response: 0.6, dampingFraction: 1)) {
-                animatedProgress = newValue
+                animatedProgress = Self.restPose(for: newValue)
             }
         }
+    }
+
+    /// The value the ring settles at. At (or a hair past) a whole lap, the ring rests
+    /// with its tip 0.04 laps beyond 12 o'clock so the overlap shadow reads clearly.
+    /// Baking that into the ANIMATION TARGET — rather than flooring `over` at render
+    /// time — lets the tip sweep continuously through 12 o'clock and ease into the
+    /// rest pose; the render-side clamp made it snap there on the final frame.
+    static func restPose(for progress: Double) -> Double {
+        guard progress >= 1 else { return progress }
+        let laps = progress.rounded(.down)
+        let fraction = progress - laps
+        return fraction < 0.04 ? laps + 0.04 : progress
     }
 }
 
@@ -99,12 +111,13 @@ private struct RingArcs: View, Animatable {
 
     /// The top lap's arc: the FRACTIONAL part of progress, so the tip keeps moving at
     /// 200%, 300%, … instead of parking at 12 o'clock (where its shadow hides under the
-    /// lap and the ring reads as a flat donut). A small minimum overlap keeps the
-    /// 12 o'clock join covered right at whole-lap boundaries.
+    /// lap and the ring reads as a flat donut). No minimum floor here: the whole-lap
+    /// rest pose (tip parked 0.04 past 12) is enforced by ActivityRingView.restPose on
+    /// the animation target, so this stays continuous while the tip sweeps through
+    /// 12 o'clock mid-animation.
     private var over: Double {
         guard progress >= 1.0 else { return 0 }
-        let fraction = progress.truncatingRemainder(dividingBy: 1.0)
-        return min(max(fraction, 0.04), 0.9999)
+        return min(progress.truncatingRemainder(dividingBy: 1.0), 0.9999)
     }
 
     /// Shade at the 12 o'clock wrap where the top lap begins — the deeper into the laps,
@@ -151,7 +164,6 @@ private struct RingArcs: View, Animatable {
     var body: some View {
         let radius = min(size.width, size.height) / 2
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
-
         ZStack {
             // Dim track.
             Circle().stroke(color.opacity(0.18), lineWidth: lineWidth)
@@ -180,8 +192,12 @@ private struct RingArcs: View, Animatable {
                 // visible for every tip position — a fixed downward offset would slip
                 // under the lap when the tip is on the left. It's a dark blur, not a
                 // bright shape, so nothing reads as a circle, and the start stays clean.
+                // Fades in over the tip's first 0.04 laps so it emerges with the tip as
+                // it clears 12 o'clock instead of popping in fully formed (and fades
+                // back out right after each mid-animation lap crossing, where it would
+                // collide with the lap start anyway).
                 Circle()
-                    .fill(Color.black.opacity(0.7))
+                    .fill(Color.black.opacity(0.7 * min(over / 0.04, 1)))
                     .frame(width: lineWidth * 0.9, height: lineWidth * 0.9)
                     .blur(radius: lineWidth * 0.14)
                     .position(tipPoint(for: over, center: center, radius: radius,

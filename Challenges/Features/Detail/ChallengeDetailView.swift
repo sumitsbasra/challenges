@@ -1242,6 +1242,16 @@ struct ScoreHistoryChart: View {
 
     /// Raw (continuous) selection from the chart gesture; snapped to a day for display.
     @State private var rawSelection: Date?
+    /// Measured size of the floating callout, for edge clamping and the connector line.
+    @State private var calloutSize: CGSize = .zero
+
+    init(participation: Participation, challenge: Challenge, title: String = "My Points",
+         initialSelection: Date? = nil) {
+        self.participation = participation
+        self.challenge = challenge
+        self.title = title
+        _rawSelection = State(initialValue: initialSelection)
+    }
 
     private var cal: Calendar { Calendar.current }
     private var startDay: Date { cal.startOfDay(for: challenge.startDate) }
@@ -1300,32 +1310,50 @@ struct ScoreHistoryChart: View {
                     .foregroundStyle(barColor(for: entry.day))
                     .cornerRadius(3)
                 }
+            }
+            // The callout is drawn manually in an overlay rather than as a mark
+            // annotation: Charts' annotation overflow clamps against the FULL
+            // scrollable content, not the visible window, so edge-of-viewport bars
+            // still clipped — and a RuleMark can't know the callout's pixel height,
+            // so its guide line always ran to the top of the plot instead of
+            // stopping at the card. Health's pattern, done by hand: card pinned
+            // inside the visible plot (sliding at the edges), connector line from
+            // the card's bottom edge down to the bar top, staying on the bar even
+            // when the card has slid.
+            .chartOverlay { proxy in
+                GeometryReader { geo in
+                    if let sel = selectedEntry, let plotAnchor = proxy.plotFrame {
+                        let plot = geo[plotAnchor]
+                        let barCenter = sel.day.addingTimeInterval(43_200)
+                        if let xInPlot = proxy.position(forX: barCenter),
+                           xInPlot > -30, xInPlot < plot.width + 30 {
+                            let xBar = plot.minX + xInPlot
+                            let halfWidth = max(calloutSize.width, 80) / 2
+                            let calloutX = min(max(xBar, plot.minX + halfWidth + 2),
+                                               plot.maxX - halfWidth - 2)
+                            let calloutHeight = max(calloutSize.height, 44)
+                            let calloutTop = plot.minY + 2
 
-                if let sel = selectedEntry {
-                    // Dimmed vertical guide, pushed BEHIND the bars (zIndex -1) so it
-                    // doesn't draw a stripe across the highlighted bar.
-                    RuleMark(x: .value("Selected", sel.day, unit: .day))
-                        .foregroundStyle(Color.secondary.opacity(0.35))
-                        .lineStyle(StrokeStyle(lineWidth: 1))
-                        .zIndex(-1)
+                            if let yInPlot = proxy.position(forY: sel.points) {
+                                let barTop = plot.minY + yInPlot
+                                let lineTop = calloutTop + calloutHeight + 2
+                                if barTop > lineTop {
+                                    Path { p in
+                                        p.move(to: CGPoint(x: xBar, y: lineTop))
+                                        p.addLine(to: CGPoint(x: xBar, y: barTop))
+                                    }
+                                    .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                                }
+                            }
 
-                    // The callout itself lives on a separate, invisible mark with the
-                    // default (unindexed) z-order — Swift Charts ties an annotation's
-                    // z-order to its own mark, so attaching it to the de-indexed
-                    // RuleMark above was drawing the callout behind the bars too.
-                    PointMark(
-                        x: .value("Selected", sel.day, unit: .day),
-                        y: .value("Points", sel.points)
-                    )
-                    .opacity(0)
-                    .annotation(
-                        position: .top, spacing: 2,
-                        // Clamp inside the plot on both axes: a leftmost or maxed-out
-                        // bar slides the callout inward instead of overlapping the
-                        // card title above the chart.
-                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
-                    ) {
-                        selectionCallout(sel)
+                            selectionCallout(sel)
+                                .background(GeometryReader { g in
+                                    Color.clear
+                                        .onAppear { calloutSize = g.size }
+                                        .onChange(of: g.size) { _, new in calloutSize = new }
+                                })
+                                .position(x: calloutX, y: calloutTop + calloutHeight / 2)
+                        }
                     }
                 }
             }

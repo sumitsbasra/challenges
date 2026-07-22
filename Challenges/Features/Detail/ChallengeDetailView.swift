@@ -1329,8 +1329,13 @@ struct ScoreHistoryChart: View {
                            xInPlot > -30, xInPlot < plot.width + 30 {
                             let xBar = plot.minX + xInPlot
                             let halfWidth = max(calloutSize.width, 80) / 2
-                            let calloutX = min(max(xBar, plot.minX + halfWidth + 2),
-                                               plot.maxX - halfWidth - 2)
+                            // Center on the bar; clamp only against the CARD bounds
+                            // (the chart sits inside 16pt of card padding the callout
+                            // can render into), so every interior bar is exactly
+                            // centered and only a true edge nudges by a pixel or two.
+                            let cardPad: CGFloat = 16
+                            let calloutX = min(max(xBar, -cardPad + halfWidth),
+                                               geo.size.width + cardPad - halfWidth)
                             let calloutHeight = max(calloutSize.height, 44)
                             let calloutTop = plot.minY + 2
 

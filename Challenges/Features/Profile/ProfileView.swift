@@ -277,8 +277,10 @@ struct NotificationSettingsView: View {
 
     var body: some View {
         List {
-            // Permission warning banner
-            if authStatus == .denied {
+            // Permission warning banner. Covers .notDetermined too: the toggles below
+            // all default to on, so without this a user who was never asked sees an
+            // all-enabled screen while iOS silently blocks every notification.
+            if authStatus == .denied || authStatus == .notDetermined {
                 Section {
                     HStack(spacing: 12) {
                         Image(systemName: "bell.slash.fill")
@@ -286,17 +288,31 @@ struct NotificationSettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Notifications are off")
                                 .font(.subheadline.weight(.semibold))
-                            Text("Enable them in Settings to receive alerts.")
+                            Text(authStatus == .denied
+                                 ? "Enable them in Settings to receive alerts."
+                                 : "Allow notifications to receive alerts.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button("Settings") {
-                            if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
-                                UIApplication.shared.open(url)
+                        if authStatus == .denied {
+                            Button("Settings") {
+                                if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
                             }
+                            .font(.caption.weight(.semibold))
+                        } else {
+                            Button("Allow") {
+                                Task {
+                                    _ = try? await UNUserNotificationCenter.current()
+                                        .requestAuthorization(options: [.alert, .badge, .sound])
+                                    await refreshStatus()
+                                    rescheduleFromPrefs()
+                                }
+                            }
+                            .font(.caption.weight(.semibold))
                         }
-                        .font(.caption.weight(.semibold))
                     }
                     .padding(.vertical, 4)
                 }

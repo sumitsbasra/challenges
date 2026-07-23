@@ -86,6 +86,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             // during onboarding (the .health step) — requesting here would pop the
             // HealthKit permission dialog before they've even signed in.
             guard UserSession.shared.isAuthenticated else { return }
+
+            // Ask for notification permission if it was never determined. Signed-in
+            // users skip onboarding entirely (ContentView routes straight to HomeView),
+            // so anyone who onboarded on a build before the notifications step existed
+            // — or who dismissed that prompt — would otherwise NEVER be asked again,
+            // and every scheduler/monitor bails on the unauthorized status. The in-app
+            // toggles all default to on, so nothing surfaces that anything is wrong.
+            // No-op once the status is determined either way.
+            let center = UNUserNotificationCenter.current()
+            if await center.notificationSettings().authorizationStatus == .notDetermined {
+                _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+            }
+
             // Re-request on launch so users who onboarded before a new data type was
             // added pick it up (a no-op if all types are already authorized).
             try? await HealthKitManager.shared.requestAuthorization()

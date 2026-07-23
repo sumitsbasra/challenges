@@ -62,11 +62,19 @@ final class OvertakeMonitorTests: XCTestCase {
         XCTAssertEqual(overtake?.pointsBehind, 0)
     }
 
-    func testBodyNamesPasserChallengeAndGap() {
+    func testTitleNamesPasserAndChallenge() {
         let overtake = OvertakeMonitor.Overtake(passerName: "Maya", pointsBehind: 43.4, newRank: 2)
         XCTAssertEqual(
-            OvertakeMonitor.body(for: overtake, challengeTitle: "Road to NYC"),
-            "Maya just passed you in Road to NYC. You're 43 points behind. Go get them!"
+            OvertakeMonitor.title(for: overtake, challengeTitle: "Road to NYC"),
+            "Maya just passed you in Road to NYC"
+        )
+    }
+
+    func testBodyStatesTheGap() {
+        let overtake = OvertakeMonitor.Overtake(passerName: "Maya", pointsBehind: 43.4, newRank: 2)
+        XCTAssertEqual(
+            OvertakeMonitor.body(for: overtake),
+            "You're 43 points behind, go get them!"
         )
     }
 

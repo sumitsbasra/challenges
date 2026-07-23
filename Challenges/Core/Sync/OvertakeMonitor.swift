@@ -66,8 +66,8 @@ enum OvertakeMonitor {
         guard status == .authorized || status == .provisional else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "You've been passed 🏃"
-        content.body  = body(for: overtake, challengeTitle: challenge.title)
+        content.title = title(for: overtake, challengeTitle: challenge.title)
+        content.body  = body(for: overtake)
         content.sound = .default
         content.userInfo = ["challengeID": challenge.id]
 
@@ -85,8 +85,13 @@ enum OvertakeMonitor {
         }
     }
 
-    static func body(for overtake: Overtake, challengeTitle: String) -> String {
-        let points = Int(overtake.pointsBehind.rounded())
-        return "\(overtake.passerName) just passed you in \(challengeTitle). You're \(points) points behind. Go get them!"
+    /// Who passed you, and where — the title carries the news.
+    static func title(for overtake: Overtake, challengeTitle: String) -> String {
+        "\(overtake.passerName) just passed you in \(challengeTitle)"
+    }
+
+    /// The gap and the nudge.
+    static func body(for overtake: Overtake) -> String {
+        "You're \(Int(overtake.pointsBehind.rounded())) points behind, go get them!"
     }
 }

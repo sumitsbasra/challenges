@@ -14,6 +14,13 @@ final class HealthKitManager: ObservableObject {
 
     @Published var authorizationStatus: AuthorizationStatus = .unknown
 
+    /// True when the permission dialog has been shown but no activity data is readable —
+    /// the only way to infer a denied READ permission, which Apple deliberately hides
+    /// (`authorizationStatus(for:)` reflects write access only, and
+    /// `statusForAuthorizationRequest` returns `.unnecessary` for "asked", whether the
+    /// user allowed or denied). Set by `checkDataReadable()`.
+    @Published var dataUnreadable = false
+
     enum AuthorizationStatus {
         case unknown, authorized, partiallyAuthorized, denied
     }
@@ -102,6 +109,41 @@ final class HealthKitManager: ObservableObject {
             @unknown default:
                 authorizationStatus = .unknown
             }
+        }
+    }
+
+    /// Infers whether activity data is actually readable, since iOS never reports a
+    /// denied READ permission. Looks for ANY steps or active-energy sample in the last
+    /// 7 days: a carried iPhone always generates some, so a completely empty result
+    /// means the app is almost certainly blocked (or the user has genuinely never
+    /// carried the device, which produces the same zero score either way — both are
+    /// worth surfacing rather than silently showing 0 points).
+    ///
+    /// Only meaningful once the dialog has been shown; skipped otherwise so a
+    /// pre-onboarding user isn't warned about a permission they haven't been asked for.
+    func checkDataReadable() async {
+        guard HKHealthStore.isHealthDataAvailable(), authorizationStatus == .authorized else {
+            dataUnreadable = false
+            return
+        }
+        let end = Date()
+        let start = end.addingTimeInterval(-7 * 24 * 3600)
+        async let steps = anySamples(HKQuantityType(.stepCount), from: start, to: end)
+        async let energy = anySamples(HKQuantityType(.activeEnergyBurned), from: start, to: end)
+        let (hasSteps, hasEnergy) = await (steps, energy)
+        dataUnreadable = !hasSteps && !hasEnergy
+    }
+
+    /// True if at least one sample of `type` exists in the range. A HealthKit error
+    /// returns false (treated as unreadable) — the same outcome a denial produces.
+    private func anySamples(_ type: HKSampleType, from start: Date, to end: Date) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+            let query = HKSampleQuery(sampleType: type, predicate: predicate,
+                                      limit: 1, sortDescriptors: nil) { _, samples, _ in
+                continuation.resume(returning: !(samples ?? []).isEmpty)
+            }
+            store.execute(query)
         }
     }
 

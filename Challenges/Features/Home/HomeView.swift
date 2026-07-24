@@ -8,6 +8,7 @@ struct HomeView: View {
     @Environment(UserSession.self) private var session
     @Environment(\.scenePhase) private var scenePhase
     @State private var vm = HomeViewModel()
+    @ObservedObject private var hk = HealthKitManager.shared
     @State private var navigationPath: [String] = []
     @State private var showProfile = false
     @State private var showNewChallenge = false
@@ -64,7 +65,10 @@ struct HomeView: View {
             // when the app returns from the background — so the rings/energy would go
             // stale while the day's activity keeps accruing. Refresh on foreground.
             guard newPhase == .active else { return }
-            Task { await vm.loadRings() }
+            Task {
+                await vm.loadRings()
+                await hk.checkDataReadable()
+            }
         }
         .sheet(isPresented: $showProfile, onDismiss: {
             if let id = session.userID { profilePhoto = AvatarCache.load(userID: id) }
@@ -90,6 +94,7 @@ struct HomeView: View {
                 try? await CloudKitManager.shared.saveUser(user)
             }
             await vm.load(userID: userID)
+            await hk.checkDataReadable()
             // Sync today's HealthKit data and immediately patch the home cards so
             // "today pts" reflects the real value rather than stale CloudKit data.
             let synced = await SyncCoordinator.shared.syncCurrentChallenges()
@@ -284,6 +289,29 @@ struct HomeView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // Empty rings are indistinguishable from a rest day, so say so explicitly
+            // when the store is unreadable — otherwise a blocked user just sees zeros
+            // and assumes the app is broken (iOS never reveals denied READ access).
+            if hk.dataUnreadable {
+                Button {
+                    showProfile = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text("Can't read your activity data. Tap to fix.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.top, 4)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 20)

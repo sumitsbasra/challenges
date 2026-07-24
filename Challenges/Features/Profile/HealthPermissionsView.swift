@@ -5,23 +5,33 @@ struct HealthPermissionsView: View {
     @State private var isRequesting = false
     @State private var requestError: String? = nil
 
+    /// Green checkmarks would be a lie when nothing is actually readable.
+    private var effectiveStatus: HealthKitManager.AuthorizationStatus {
+        hk.dataUnreadable && hk.authorizationStatus == .authorized ? .denied : hk.authorizationStatus
+    }
+
     var body: some View {
         List {
             Section {
                 StatusRow(title: "Active Energy", icon: "figure.run",
-                          color: .moveRing, status: hk.authorizationStatus)
+                          color: .moveRing, status: effectiveStatus)
                 StatusRow(title: "Steps", icon: "shoeprints.fill",
-                          color: .stepsColor, status: hk.authorizationStatus)
+                          color: .stepsColor, status: effectiveStatus)
                 StatusRow(title: "Exercise Minutes", icon: "timer",
-                          color: .exerciseRing, status: hk.authorizationStatus)
+                          color: .exerciseRing, status: effectiveStatus)
                 StatusRow(title: "Stand Hours (Watch)", icon: "figure.stand",
-                          color: .standRing, status: hk.authorizationStatus)
+                          color: .standRing, status: effectiveStatus)
             } header: {
                 Text("Health Data Access")
             } footer: {
+                // iOS never reveals whether a READ permission was granted, so "asked"
+                // is the most we can claim — and we only say data is flowing when we
+                // can actually read some.
                 switch hk.authorizationStatus {
+                case .authorized where hk.dataUnreadable:
+                    Text("No activity data is readable. Open Settings → Privacy & Security → Health → Challenges and turn on Steps, Active Energy, and Exercise Minutes.")
                 case .authorized:
-                    Text("All permissions granted. Your data is syncing normally.")
+                    Text("Activity data is readable and syncing normally.")
                 case .partiallyAuthorized:
                     Text("Some permissions are missing. Your competition score may be incomplete.")
                 case .denied, .unknown:
@@ -29,7 +39,7 @@ struct HealthPermissionsView: View {
                 }
             }
 
-            if hk.authorizationStatus != .authorized {
+            if hk.authorizationStatus != .authorized || hk.dataUnreadable {
                 Section {
                     Button {
                         isRequesting = true
@@ -37,6 +47,10 @@ struct HealthPermissionsView: View {
                         Task {
                             do {
                                 try await hk.requestAuthorization()
+                                // Re-check readability: iOS silently no-ops the request
+                                // once the dialog has been shown, so this is what tells
+                                // the user whether anything actually changed.
+                                await hk.checkDataReadable()
                             } catch {
                                 requestError = error.localizedDescription
                             }
@@ -69,6 +83,7 @@ struct HealthPermissionsView: View {
         .navigationTitle("Health Permissions")
         .softTopScrollEdge()
         .onAppear { hk.updateAuthorizationStatus() }
+        .task { await hk.checkDataReadable() }
         .alert("Permission Error", isPresented: Binding(
             get: { requestError != nil },
             set: { if !$0 { requestError = nil } }

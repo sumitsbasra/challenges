@@ -7,6 +7,7 @@ struct ProfileView: View {
     @Environment(UserSession.self) private var session
     @State private var vm = ProfileViewModel()
     @State private var showCropPicker = false
+    @ObservedObject private var hk = HealthKitManager.shared
 
     var body: some View {
         NavigationStack {
@@ -30,7 +31,17 @@ struct ProfileView: View {
                 // ── Health ────────────────────────────────────────
                 Section("Health") {
                     NavigationLink(destination: HealthPermissionsView()) {
-                        Label("Permissions", systemImage: "heart.text.clipboard")
+                        LabeledContent {
+                            // Without this the row looks fine while scores sit at zero:
+                            // iOS hides denied READ permissions, so an unreadable store
+                            // is the only symptom the user ever sees.
+                            if hk.dataUnreadable {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                            }
+                        } label: {
+                            Label("Permissions", systemImage: "heart.text.clipboard")
+                        }
                     }
 
                     NavigationLink(destination: DataSourceView(vm: vm)) {

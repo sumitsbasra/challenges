@@ -275,6 +275,8 @@ struct NotificationSettingsView: View {
 
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var showDeniedAlert = false
+    /// nil until the first read, so the row shows "—" rather than a misleading 0.
+    @State private var pendingCount: Int?
 
     private var items: [(NotificationItem, Binding<Bool>)] {[
         (NotificationItem(id: "start",    icon: "flag.fill",        color: .exerciseRing,      title: "Challenge Starting",   description: "The day before your challenge begins"),     $challengeStarting),
@@ -336,11 +338,33 @@ struct NotificationSettingsView: View {
             } footer: {
                 Text("Notifications are only sent for challenges you're part of.")
             }
+
+            // Scheduled notifications are otherwise invisible until they fire, so a
+            // silent scheduling failure looks identical to "nothing due yet". The
+            // count makes the difference obvious, and the test send proves delivery
+            // end to end without waiting for a 9 AM trigger.
+            Section {
+                LabeledContent("Scheduled") {
+                    Text(pendingCount.map { "\($0)" } ?? "—")
+                        .foregroundStyle(.secondary)
+                }
+                Button("Send a Test Notification") {
+                    Task { await sendTestNotification() }
+                }
+                .disabled(authStatus != .authorized && authStatus != .provisional)
+            } header: {
+                Text("Delivery")
+            } footer: {
+                Text(pendingCount == 0
+                     ? "Nothing is scheduled. If you're in an active challenge, this means notifications couldn't be scheduled — check the permission above."
+                     : "Upcoming reminders queued with iOS. The test arrives in about 5 seconds — leave this screen to see the banner.")
+            }
         }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .softTopScrollEdge()
         .task { await refreshStatus() }
+        .task { await refreshPendingCount() }
         // Reschedule whenever any preference changes so the pending queue stays in sync.
         .onChange(of: challengeStarting) { _, _ in rescheduleFromPrefs() }
         .onChange(of: dailyUpdate)       { _, _ in rescheduleFromPrefs() }
@@ -422,11 +446,34 @@ struct NotificationSettingsView: View {
         authStatus = settings.authorizationStatus
     }
 
+    private func refreshPendingCount() async {
+        pendingCount = await UNUserNotificationCenter.current()
+            .pendingNotificationRequests().count
+    }
+
+    /// Fires a real local notification a few seconds out, so the user can confirm
+    /// delivery (and their Focus/Settings state) without waiting for a scheduled one.
+    private func sendTestNotification() async {
+        let content = UNMutableNotificationContent()
+        content.title = "Notifications are working 🎉"
+        content.body  = "You'll get alerts like this for your challenges."
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "ch-test-\(UUID().uuidString)",
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        )
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
     /// Re-runs the scheduler using cached challenges so the pending queue immediately
     /// reflects the user's new toggle state — no CloudKit fetch required.
     private func rescheduleFromPrefs() {
         guard let userID = UserSession.shared.userID,
               let cached = ChallengeCache.load(userID: userID) else { return }
-        Task { await NotificationScheduler.reschedule(for: cached.challenges) }
+        Task {
+            await NotificationScheduler.reschedule(for: cached.challenges)
+            await refreshPendingCount()
+        }
     }
 }

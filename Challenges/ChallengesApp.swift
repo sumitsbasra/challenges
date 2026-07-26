@@ -96,7 +96,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             // No-op once the status is determined either way.
             let center = UNUserNotificationCenter.current()
             if await center.notificationSettings().authorizationStatus == .notDetermined {
-                _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+                let granted = (try? await center.requestAuthorization(
+                    options: [.alert, .badge, .sound])) ?? false
+                // Reschedule on grant. HomeView's .task fires concurrently with this
+                // request, so it usually reaches NotificationScheduler.reschedule while
+                // the status is still undetermined — that call bails on the
+                // authorization guard and schedules NOTHING, with no retry until the
+                // next launch. Without this the first run after granting stays silent.
+                if granted, let userID = UserSession.shared.userID,
+                   let cached = ChallengeCache.load(userID: userID) {
+                    await NotificationScheduler.reschedule(for: cached.challenges)
+                }
             }
 
             // Re-request on launch so users who onboarded before a new data type was

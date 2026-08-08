@@ -100,9 +100,11 @@ actor SyncCoordinator {
 
         let calendar = Calendar.current
         let today    = calendar.startOfDay(for: Date())
-        // Late joiners start scoring from their join date, not the challenge start date.
-        let effectiveStart = max(challenge.startDate, participation.joinedAt)
-        let startDay = calendar.startOfDay(for: effectiveStart)
+        // Score the FULL challenge window, including days before this user joined.
+        // HealthKit already holds their history, so a late joiner is scored on the
+        // same days as everyone else instead of starting at zero — otherwise anyone
+        // joining an in-progress challenge is mathematically out of it on arrival.
+        let startDay = calendar.startOfDay(for: challenge.startDate)
         let endDay   = min(today, calendar.startOfDay(for: challenge.endDate))
 
         // Collect all days in the competition window.

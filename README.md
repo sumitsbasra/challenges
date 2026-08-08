@@ -36,7 +36,7 @@ A single over-achieved ring can reach the cap on its own, just like Apple. Scori
 ## Features
 
 - **Group competitions** — unlimited participants, custom start and end dates
-- **Late joining** — participants can join active challenges; scoring starts from their join date
+- **Late joining** — participants can join a challenge already in progress and are scored for the full window, backfilled from their HealthKit history, so they aren't permanently behind for having joined late
 - **Live leaderboard** — CloudKit subscriptions push score updates in near real-time, active and completed challenges both show ranked participant list
 - **Invite codes** — 6-character codes (e.g. `FX4K9R`) shareable via link, copy-paste, or system share sheet
 - **Fair scoring** — Watch and non-Watch users compete on equal footing with matched 3-metric formulas; scoring mode is locked at join time

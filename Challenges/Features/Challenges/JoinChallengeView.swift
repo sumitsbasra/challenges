@@ -42,10 +42,8 @@ final class JoinChallengeViewModel {
                 alreadyJoined = true
             }
             previewChallenge = challenge
-        } catch let e as CloudKitError {
-            error = e.localizedDescription
         } catch {
-            self.error = error.localizedDescription
+            self.error = CloudKitError.message(for: error)
         }
     }
 
@@ -75,7 +73,7 @@ final class JoinChallengeViewModel {
             try await ck.saveParticipation(participation)
             joined = true
         } catch {
-            if self.error == nil { self.error = error.localizedDescription }
+            if self.error == nil { self.error = CloudKitError.message(for: error) }
         }
     }
 }

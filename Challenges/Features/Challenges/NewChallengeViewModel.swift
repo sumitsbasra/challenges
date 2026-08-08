@@ -58,7 +58,7 @@ final class NewChallengeViewModel {
         do {
             try await ck.saveChallenge(challenge)
         } catch {
-            self.error = "Could not create challenge: \(error.localizedDescription)"
+            self.error = CloudKitError.message(for: error)
             return
         }
 

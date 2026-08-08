@@ -38,7 +38,7 @@ final class ProfileViewModel {
             do {
                 try await ck.saveUser(user, avatarData: jpegData)
             } catch {
-                await MainActor.run { self.error = error.localizedDescription }
+                await MainActor.run { self.error = CloudKitError.message(for: error) }
             }
         }
     }
@@ -58,7 +58,7 @@ final class ProfileViewModel {
             try await ck.saveUser(updated)
             UserSession.shared.update(user: updated)
         } catch {
-            self.error = error.localizedDescription
+            self.error = CloudKitError.message(for: error)
         }
     }
 
@@ -73,7 +73,7 @@ final class ProfileViewModel {
         do {
             try await ck.saveUser(user)
         } catch {
-            self.error = error.localizedDescription
+            self.error = CloudKitError.message(for: error)
         }
     }
 

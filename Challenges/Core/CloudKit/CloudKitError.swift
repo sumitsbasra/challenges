@@ -34,4 +34,31 @@ enum CloudKitError: LocalizedError {
             return error.localizedDescription
         }
     }
+
+    /// User-facing text for any error thrown by a CloudKit call.
+    ///
+    /// Raw `CKError.localizedDescription` is Apple's internal phrasing — a signed-out
+    /// user sees "This request requires an authenticated account," which means nothing
+    /// to someone who just tapped an invite link. Call this anywhere an error reaches
+    /// the UI so the cause is actionable.
+    static func message(for error: Error) -> String {
+        if let known = error as? CloudKitError {
+            return known.errorDescription ?? "Something went wrong."
+        }
+        guard let ck = error as? CKError else { return "Something went wrong. Try again." }
+        switch ck.code {
+        case .notAuthenticated:
+            return "Sign in to iCloud in Settings to use Challenges."
+        case .networkUnavailable, .networkFailure:
+            return "No internet connection."
+        case .quotaExceeded:
+            return "Your iCloud storage is full."
+        case .requestRateLimited, .zoneBusy, .serviceUnavailable, .serverResponseLost:
+            return "iCloud is busy. Try again in a moment."
+        case .permissionFailure:
+            return "Challenges doesn't have permission to use iCloud."
+        default:
+            return "Something went wrong. Try again."
+        }
+    }
 }

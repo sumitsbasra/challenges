@@ -347,11 +347,27 @@ final class CloudKitManager: ObservableObject {
     /// make every write an update, never a duplicate.
     func saveDailyScores(_ scores: [DailyScore]) async throws {
         guard !scores.isEmpty else { return }
-        let records = scores.map { RecordMapper.record(from: $0) }
-        let operation = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
-        operation.savePolicy = .changedKeys
-        operation.isAtomic = false
+        // Chunked + retried. A backfill after several days away can be a large batch,
+        // and this write had no retry: one transient failure (rate limit, zoneBusy, a
+        // network blip) discarded every day in it. Those days then read as zero
+        // forever from CloudKit's side, while TODAY still looked right because the
+        // detail view overlays it straight from HealthKit — exactly the "today shows
+        // but earlier days don't" gap. Deterministic record IDs make retries safe.
+        for chunk in scores.chunked(into: 200) {
+            let records = chunk.map { RecordMapper.record(from: $0) }
+            try await withRetry {
+                try await self.modify(records: records, savePolicy: .changedKeys, atomic: false)
+            }
+        }
+    }
 
+    /// Runs a `CKModifyRecordsOperation` as an async call.
+    private func modify(records: [CKRecord],
+                        savePolicy: CKModifyRecordsOperation.RecordSavePolicy,
+                        atomic: Bool) async throws {
+        let operation = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
+        operation.savePolicy = savePolicy
+        operation.isAtomic = atomic
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             operation.modifyRecordsResultBlock = { result in
                 switch result {
@@ -369,18 +385,12 @@ final class CloudKitManager: ObservableObject {
     /// update, never a duplicate.
     func saveWorkouts(_ workouts: [WorkoutSummary]) async throws {
         guard !workouts.isEmpty else { return }
-        let records = workouts.map { RecordMapper.record(from: $0) }
-        let operation = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
-        operation.savePolicy = .changedKeys
-        operation.isAtomic = false
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            operation.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success: continuation.resume()
-                case .failure(let error): continuation.resume(throwing: error)
-                }
+        // Same chunk + retry treatment as scores: deterministic ids keep it idempotent.
+        for chunk in workouts.chunked(into: 200) {
+            let records = chunk.map { RecordMapper.record(from: $0) }
+            try await withRetry {
+                try await self.modify(records: records, savePolicy: .changedKeys, atomic: false)
             }
-            publicDB.add(operation)
         }
     }
 
@@ -419,18 +429,10 @@ final class CloudKitManager: ObservableObject {
     /// Upsert a single reaction. Deterministic day-keyed recordNames mean re-sending
     /// the same day updates the emoji instead of creating a duplicate.
     func saveReaction(_ reaction: Reaction) async throws {
-        let record = RecordMapper.record(from: reaction)
-        let operation = CKModifyRecordsOperation(recordsToSave: [record], recordIDsToDelete: nil)
-        operation.savePolicy = .allKeys
-        operation.isAtomic = true
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            operation.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success: continuation.resume()
-                case .failure(let error): continuation.resume(throwing: error)
-                }
-            }
-            publicDB.add(operation)
+        // Retried like the other writes; the day-keyed id keeps it an upsert.
+        try await withRetry {
+            try await self.modify(records: [RecordMapper.record(from: reaction)],
+                                  savePolicy: .allKeys, atomic: true)
         }
     }
 
@@ -614,6 +616,16 @@ final class CloudKitManager: ObservableObject {
         let info = CKSubscription.NotificationInfo()
         info.shouldSendContentAvailable = true  // silent push
         return info
+    }
+}
+
+private extension Array {
+    /// Splits into batches so one oversized CloudKit operation can't fail wholesale.
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0, count > size else { return isEmpty ? [] : [self] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0 ..< Swift.min($0 + size, count)])
+        }
     }
 }
 

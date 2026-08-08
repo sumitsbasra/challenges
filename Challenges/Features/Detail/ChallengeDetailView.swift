@@ -119,7 +119,7 @@ struct ChallengeDetailView: View {
                    let joinURL = URL(string: "challenges://join/\(challenge.inviteCode)") {
                     ShareLink(
                         item: joinURL,
-                        message: Text("Join my fitness challenge! Code: \(challenge.inviteCode)")
+                        message: Text("Join my Challenge!\nCode: \(challenge.inviteCode)")
                     ) {
                         Image(systemName: "square.and.arrow.up")
                     }

@@ -345,7 +345,7 @@ private struct ChallengeCreatedView: View {
             Spacer()
 
             ShareLink(
-                item: "Join my Challenges fitness challenge! Code: \(challenge.inviteCode)",
+                item: "Join my Challenge!\nCode: \(challenge.inviteCode)",
                 subject: Text("Join my challenge")
             ) {
                 Text("Share Invite Code")

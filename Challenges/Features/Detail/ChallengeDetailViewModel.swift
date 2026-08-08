@@ -510,6 +510,18 @@ final class ChallengeDetailViewModel {
     @MainActor
     func loadLeaderboard() async {
         guard !leaderboardLoaded, !isLoadingLeaderboard else { return }
+
+        // A pending challenge has no scores yet — nobody can earn points before the
+        // start date. Querying anyway wasted a round trip and, worse, could surface
+        // a "Couldn't load the leaderboard" banner on a brand-new challenge: the
+        // query filters on a challenge reference that CloudKit may still be indexing,
+        // and with participations not yet queryable either, the empty-state check
+        // below let that transient failure through as a hard error.
+        guard challenge.status != .pending else {
+            leaderboardLoaded = true
+            return
+        }
+
         isLoadingLeaderboard = true
         defer { isLoadingLeaderboard = false }
 

@@ -1,6 +1,6 @@
 # Challenges
 
-Group fitness competitions for Apple rings — extend Apple's native 1-on-1 Activity Sharing to groups of 2–20 people using the same ring-based points system users already know.
+Group fitness competitions for Apple rings — extend Apple's native 1-on-1 Activity Sharing to groups of any size using the same ring-based points system users already know.
 
 ## What it does
 
@@ -33,7 +33,7 @@ Each contribution is capped at 2× so closing a ring twice still rewards effort.
 
 ## Features
 
-- **Group competitions** — 2–20 participants per challenge
+- **Group competitions** — unlimited participants per challenge
 - **Live leaderboard** — CloudKit subscriptions push updates in near real-time; cached locally so reopening a challenge is instant
 - **Invite codes** — 6-character codes (e.g. `FX4K9R`) shareable via link or copy-paste
 - **Fair scoring** — Watch and non-Watch users compete on equal footing

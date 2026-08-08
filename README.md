@@ -1,6 +1,6 @@
 # Challenges
 
-Group fitness competitions for Apple rings — extends Apple's native Activity Sharing to groups of 2–20 people using the same ring-based scoring system users already know.
+Group fitness competitions for Apple rings — extends Apple's native Activity Sharing to groups of any size using the same ring-based scoring system users already know.
 
 ## What it does
 

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		545E1A093027A6F000552E0F /* ResultsHeaderCardMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545E1A083027A6F000552E0F /* ResultsHeaderCardMockups.swift */; };
 		548BBE252F6FEDC9005D7958 /* challenges.icon in Resources */ = {isa = PBXBuildFile; fileRef = 548BBE242F6FEDC9005D7958 /* challenges.icon */; };
 		548FF42C2F80D9FC00C2495A /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1000054 /* WidgetKit.framework */; };
 		548FF42E2F80D9FC00C2495A /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 548FF42D2F80D9FC00C2495A /* SwiftUI.framework */; };
@@ -22,11 +23,8 @@
 		A1000002 /* AppUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000002 /* AppUser.swift */; };
 		A1000003 /* Challenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000003 /* Challenge.swift */; };
 		A1000004 /* Participation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000004 /* Participation.swift */; };
-		A1000090 /* Reaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000090 /* Reaction.swift */; };
-		A1000091 /* OvertakeMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000091 /* OvertakeMonitor.swift */; };
 		A1000005 /* DailyScore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000005 /* DailyScore.swift */; };
 		A1000006 /* RingData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000006 /* RingData.swift */; };
-		A1000080 /* WorkoutSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000080 /* WorkoutSummary.swift */; };
 		A1000007 /* PointsCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000007 /* PointsCalculator.swift */; };
 		A1000008 /* GoalResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000008 /* GoalResolver.swift */; };
 		A1000009 /* ScoreAggregator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000009 /* ScoreAggregator.swift */; };
@@ -78,6 +76,9 @@
 		A1000070 /* NotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000070 /* NotificationScheduler.swift */; };
 		A1000071 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000071 /* HomeViewModel.swift */; };
 		A1000072 /* HomeChallengeRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000072 /* HomeChallengeRows.swift */; };
+		A1000080 /* WorkoutSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000080 /* WorkoutSummary.swift */; };
+		A1000090 /* Reaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000090 /* Reaction.swift */; };
+		A1000091 /* OvertakeMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000091 /* OvertakeMonitor.swift */; };
 		TB000001 /* PointsCalculatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TF000001 /* PointsCalculatorTests.swift */; };
 		TB000002 /* ScoreAggregatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TF000002 /* ScoreAggregatorTests.swift */; };
 		TB000003 /* ChallengeCountdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TF000003 /* ChallengeCountdownTests.swift */; };
@@ -123,6 +124,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		545E1A083027A6F000552E0F /* ResultsHeaderCardMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultsHeaderCardMockups.swift; sourceTree = "<group>"; };
 		548BBE242F6FEDC9005D7958 /* challenges.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = challenges.icon; sourceTree = "<group>"; };
 		548FF42B2F80D9FC00C2495A /* challenges widgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "challenges widgetExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		548FF42D2F80D9FC00C2495A /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -138,11 +140,8 @@
 		B1000002 /* AppUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUser.swift; sourceTree = "<group>"; };
 		B1000003 /* Challenge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Challenge.swift; sourceTree = "<group>"; };
 		B1000004 /* Participation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Participation.swift; sourceTree = "<group>"; };
-		B1000090 /* Reaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reaction.swift; sourceTree = "<group>"; };
-		B1000091 /* OvertakeMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertakeMonitor.swift; sourceTree = "<group>"; };
 		B1000005 /* DailyScore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyScore.swift; sourceTree = "<group>"; };
 		B1000006 /* RingData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingData.swift; sourceTree = "<group>"; };
-		B1000080 /* WorkoutSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSummary.swift; sourceTree = "<group>"; };
 		B1000007 /* PointsCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsCalculator.swift; sourceTree = "<group>"; };
 		B1000008 /* GoalResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoalResolver.swift; sourceTree = "<group>"; };
 		B1000009 /* ScoreAggregator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreAggregator.swift; sourceTree = "<group>"; };
@@ -196,6 +195,9 @@
 		B1000070 /* NotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduler.swift; sourceTree = "<group>"; };
 		B1000071 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
 		B1000072 /* HomeChallengeRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeChallengeRows.swift; sourceTree = "<group>"; };
+		B1000080 /* WorkoutSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSummary.swift; sourceTree = "<group>"; };
+		B1000090 /* Reaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reaction.swift; sourceTree = "<group>"; };
+		B1000091 /* OvertakeMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertakeMonitor.swift; sourceTree = "<group>"; };
 		C0000001 /* Challenges.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Challenges.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		TF000001 /* PointsCalculatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsCalculatorTests.swift; sourceTree = "<group>"; };
 		TF000002 /* ScoreAggregatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreAggregatorTests.swift; sourceTree = "<group>"; };
@@ -493,6 +495,7 @@
 				B1000036 /* ChallengeDetailViewModel.swift */,
 				B1000037 /* LeaderboardView.swift */,
 				B1000038 /* MyProgressView.swift */,
+				545E1A083027A6F000552E0F /* ResultsHeaderCardMockups.swift */,
 			);
 			path = Detail;
 			sourceTree = "<group>";
@@ -687,6 +690,7 @@
 				A1000004 /* Participation.swift in Sources */,
 				A1000090 /* Reaction.swift in Sources */,
 				A1000091 /* OvertakeMonitor.swift in Sources */,
+				545E1A093027A6F000552E0F /* ResultsHeaderCardMockups.swift in Sources */,
 				A1000005 /* DailyScore.swift in Sources */,
 				A1000006 /* RingData.swift in Sources */,
 				A1000080 /* WorkoutSummary.swift in Sources */,

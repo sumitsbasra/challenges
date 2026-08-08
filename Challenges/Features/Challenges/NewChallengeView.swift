@@ -375,6 +375,28 @@ private struct InviteCodeInputField: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
+        VStack(spacing: 12) {
+            codeBoxes
+
+            // Codes arrive by text or DM, so pasting is the common path — the
+            // long-press menu below is invisible, and a hidden 1pt TextField gives
+            // iOS nothing to attach its own paste affordance to. PasteButton is the
+            // system control: one tap, and no pasteboard-access prompt because the
+            // user initiated it.
+            if code.count < 6 {
+                PasteButton(payloadType: String.self) { strings in
+                    guard let pasted = strings.first else { return }
+                    // didSet on `code` handles uppercasing and trimming to 6.
+                    code = pasted
+                }
+                .labelStyle(.titleAndIcon)
+                .buttonBorderShape(.capsule)
+                .tint(Color.cardBackground)
+            }
+        }
+    }
+
+    private var codeBoxes: some View {
         HStack(spacing: 10) {
             ForEach(0..<6, id: \.self) { index in
                 let chars = Array(code)

@@ -331,13 +331,10 @@ final class ChallengeDetailViewModel {
                 standHours: m.standHours, standGoal: m.standGoal
             )
         } else {
-            async let energyTask   = fetcher.activeEnergy(on: today)
-            async let exerciseTask = fetcher.exerciseMinutes(on: today)
-            let (energy, exercise) = await (energyTask ?? 0, exerciseTask ?? 0)
+            let energy = await fetcher.activeEnergy(on: today) ?? 0
             (points, updatedRingData) = PointsCalculator.calculateNonWatch(
                 steps: steps, stepsGoal: goalResolver.stepsGoal,
-                activeEnergy: energy, activeEnergyGoal: goalResolver.activeEnergyGoal,
-                exerciseMinutes: exercise
+                activeEnergy: energy, activeEnergyGoal: goalResolver.activeEnergyGoal
             )
         }
         updatedRingData.totalSteps     = steps

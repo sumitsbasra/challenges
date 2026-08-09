@@ -26,7 +26,7 @@ pts = ((move/moveGoal + exercise/30min + stand/12hr) / 3) × 600
 
 **iPhone only (2 metrics)**
 ```
-pts = ((steps/10000 + activeEnergy/500kcal) / 2) × 600
+pts = min(600, (steps/10000 + activeEnergy/500kcal) × 150)
 ```
 
 Each contribution is capped at 2× so closing a ring twice still rewards effort. Scoring mode is snapshotted at join time and never changes mid-competition.

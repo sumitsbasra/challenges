@@ -121,23 +121,21 @@ final class HomeViewModel {
                 )
             }
         } else {
-            async let stepsTask    = fetcher.steps(on: today)
-            async let energyTask   = fetcher.activeEnergy(on: today)
-            async let exerciseTask = fetcher.exerciseMinutes(on: today)
-            let (s, e, ex) = await (stepsTask ?? 0, energyTask ?? 0, exerciseTask ?? 0)
-            steps           = s
-            activeEnergy    = e
-            exerciseMinutes = ex
+            // No exercise minutes on the iPhone path — Apple Exercise Time comes from
+            // the Watch, so it would always read zero and show an empty ring.
+            async let stepsTask  = fetcher.steps(on: today)
+            async let energyTask = fetcher.activeEnergy(on: today)
+            let (s, e) = await (stepsTask ?? 0, energyTask ?? 0)
+            steps        = s
+            activeEnergy = e
             let goalResolver  = GoalResolver()
             let stepsGoalVal  = goalResolver.stepsGoal
             let energyGoalVal = goalResolver.activeEnergyGoal
-            let exerciseGoalVal = GoalResolver.defaultExerciseGoalMinutes
-            self.stepsGoal    = stepsGoalVal
-            self.energyGoal   = energyGoalVal
-            self.exerciseGoal = exerciseGoalVal
+            self.stepsGoal  = stepsGoalVal
+            self.energyGoal = energyGoalVal
             ringData = RingData(
                 moveRingPct: 0,
-                exerciseRingPct: exerciseGoalVal > 0 ? ex / exerciseGoalVal : 0,
+                exerciseRingPct: 0,
                 standRingPct: 0,
                 stepsPct:        stepsGoalVal  > 0 ? s / stepsGoalVal  : 0,
                 activeEnergyPct: energyGoalVal > 0 ? e / energyGoalVal : 0,
@@ -339,8 +337,7 @@ final class HomeViewModel {
         } else {
             points = PointsCalculator.calculateNonWatch(
                 steps: steps, stepsGoal: stepsGoal,
-                activeEnergy: activeEnergy, activeEnergyGoal: energyGoal,
-                exerciseMinutes: exerciseMinutes
+                activeEnergy: activeEnergy, activeEnergyGoal: energyGoal
             ).points
         }
         guard points > 0 else { return }

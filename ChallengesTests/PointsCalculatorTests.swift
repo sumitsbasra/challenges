@@ -78,19 +78,34 @@ final class PointsCalculatorTests: XCTestCase {
     func testNonWatchAllMetricsAtGoalScore300() {
         let (points, ring) = PointsCalculator.calculateNonWatch(
             steps: 10_000, stepsGoal: 10_000,
-            activeEnergy: 500, activeEnergyGoal: 500,
-            exerciseMinutes: 30, exerciseGoal: 30
+            activeEnergy: 500, activeEnergyGoal: 500
         )
         XCTAssertEqual(points, 300, accuracy: accuracy)
         XCTAssertEqual(ring.syncSource, .iphone)
         XCTAssertEqual(ring.stepsPct, 1.0, accuracy: accuracy)
     }
 
+    /// The whole point of the 1.5x weighting: an iPhone user who meets both of their
+    /// goals earns exactly what a Watch user earns for closing all three rings.
+    /// Apple Exercise Time is Watch-written, so scoring iPhone users out of three
+    /// metrics capped them near 200 for the same effort.
+    func testNonWatchFullDayMatchesWatchFullDay() {
+        let iPhone = PointsCalculator.calculateNonWatch(
+            steps: 10_000, stepsGoal: 10_000,
+            activeEnergy: 500, activeEnergyGoal: 500
+        ).points
+        let watch = PointsCalculator.calculateWatch(
+            moveCalories: 500, moveGoal: 500,
+            exerciseMinutes: 30, exerciseGoal: 30,
+            standHours: 12, standGoal: 12
+        ).points
+        XCTAssertEqual(iPhone, watch, accuracy: accuracy)
+    }
+
     func testNonWatchCapsAt600() {
         let (points, _) = PointsCalculator.calculateNonWatch(
             steps: 1_000_000, stepsGoal: 10_000,
-            activeEnergy: 1_000_000, activeEnergyGoal: 500,
-            exerciseMinutes: 1_000_000, exerciseGoal: 30
+            activeEnergy: 1_000_000, activeEnergyGoal: 500
         )
         XCTAssertEqual(points, PointsCalculator.maxPointsPerDay, accuracy: accuracy)
     }
@@ -98,9 +113,18 @@ final class PointsCalculatorTests: XCTestCase {
     func testNonWatchHalfGoalsScore150() {
         let (points, _) = PointsCalculator.calculateNonWatch(
             steps: 5_000, stepsGoal: 10_000,
-            activeEnergy: 250, activeEnergyGoal: 500,
-            exerciseMinutes: 15, exerciseGoal: 30
+            activeEnergy: 250, activeEnergyGoal: 500
         )
         XCTAssertEqual(points, 150, accuracy: accuracy)
+    }
+
+    /// An iPhone user's rings must never depend on exercise minutes.
+    func testNonWatchRingsIgnoreExercise() {
+        let (_, ring) = PointsCalculator.calculateNonWatch(
+            steps: 10_000, stepsGoal: 10_000,
+            activeEnergy: 500, activeEnergyGoal: 500
+        )
+        XCTAssertEqual(ring.exerciseRingPct, 0, accuracy: accuracy)
+        XCTAssertEqual(ring.activeEnergyPct, 1.0, accuracy: accuracy)
     }
 }

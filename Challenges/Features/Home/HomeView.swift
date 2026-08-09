@@ -283,9 +283,9 @@ struct HomeView: View {
                         HomeMetricRow(label: "Exercise", current: vm.exerciseMinutes, goal: vm.exerciseGoal, unit: "min", color: .exerciseRing)
                         HomeMetricRow(label: "Stand",    current: vm.standHours,      goal: vm.standGoal,    unit: "hrs", color: .standRing)
                     } else {
-                        HomeMetricRow(label: "Steps",    current: vm.steps,           goal: vm.stepsGoal,    unit: "steps", color: .stepsColor)
-                        HomeMetricRow(label: "Exercise", current: vm.exerciseMinutes, goal: vm.exerciseGoal, unit: "min",   color: .exerciseRing)
-                        HomeMetricRow(label: "Energy",   current: vm.activeEnergy,    goal: vm.energyGoal,   unit: "cal",   color: .activeEnergyColor)
+                        // Two metrics, not three: exercise minutes need a Watch.
+                        HomeMetricRow(label: "Steps",  current: vm.steps,        goal: vm.stepsGoal,  unit: "steps", color: .stepsColor)
+                        HomeMetricRow(label: "Energy", current: vm.activeEnergy, goal: vm.energyGoal, unit: "cal",   color: .activeEnergyColor)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

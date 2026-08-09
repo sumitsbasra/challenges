@@ -4,7 +4,7 @@ Group fitness competitions for Apple rings — extends Apple's native Activity S
 
 ## What it does
 
-Apple's built-in Fitness competitions only support head-to-head matchups. Challenges removes that limit: invite a group, compete over a custom date range, and see a live leaderboard updated in real time. Apple Watch users score on all three rings; iPhone-only users score on three matched metrics (steps, exercise minutes, active energy) — both paths use the same formula so everyone competes fairly.
+Apple's built-in Fitness competitions only support head-to-head matchups. Challenges removes that limit: invite a group, compete over a custom date range, and see a live leaderboard updated in real time. Apple Watch users score on all three rings; iPhone-only users score on the two metrics an iPhone measures unaided (steps, active energy), weighted so a full day is worth the same either way.
 
 ## Tech stack
 
@@ -26,10 +26,15 @@ Mirrors Apple's Activity Competitions: points are the **sum of your ring percent
 pts = min(600, (move/moveGoal + exercise/30min + stand/12hr) × 100)
 ```
 
-**iPhone only (3 metrics)**
+**iPhone only (2 metrics)**
 ```
-pts = min(600, (steps/10000 + exercise/30min + activeEnergy/500kcal) × 100)
+pts = min(600, (steps/10000 + activeEnergy/500kcal) × 150)
 ```
+
+Apple Exercise Time and Stand Hours are written by the Apple Watch, so an iPhone-only
+device reports zero for both. Scoring those users out of three metrics capped them near
+200 points for the same effort a Watch user got 300 for, so their two real metrics are
+weighted 150 each: meeting both goals equals closing all three rings.
 
 A single over-achieved ring can reach the cap on its own, just like Apple. Scoring mode is determined at join time by the Watch detected on-device and never changes mid-competition.
 
@@ -39,11 +44,11 @@ A single over-achieved ring can reach the cap on its own, just like Apple. Scori
 - **Late joining** — participants can join a challenge already in progress and are scored for the full window, backfilled from their HealthKit history, so they aren't permanently behind for having joined late
 - **Live leaderboard** — CloudKit subscriptions push score updates in near real-time, active and completed challenges both show ranked participant list
 - **Invite codes** — 6-character codes (e.g. `FX4K9R`) shareable via link, copy-paste, or system share sheet
-- **Fair scoring** — Watch and non-Watch users compete on equal footing with matched 3-metric formulas; scoring mode is locked at join time
+- **Fair scoring** — Watch users score three rings at 100 pts each; iPhone-only users score their two measurable metrics at 150 each, so a full day is 300 either way; scoring mode is locked at join time
 - **Score deduplication** — aggregator deduplicates CloudKit records by calendar day (keeps highest) to prevent point inflation from save retries
 - **Score history chart** — line chart of daily points across the full challenge window, shown for both active and completed challenges
 - **Workout list** — each device syncs its own HealthKit workout summaries (type, duration, energy, distance) to CloudKit, so any participant's detail sheet shows the activities they logged
-- **Today's activity card** — Apple Fitness-style ring stack with Move/Exercise/Stand (Watch) or Steps/Exercise/Energy (iPhone) metrics; respects user's units preference (Imperial/Metric) for distance
+- **Today's activity card** — Apple Fitness-style ring stack with Move/Exercise/Stand (Watch) or Steps/Energy (iPhone) metrics; respects user's units preference (Imperial/Metric) for distance
 - **Instant home screen** — cache pre-populated before first SwiftUI frame so challenges appear immediately on every launch with no blank flash
 - **Apple-exact rings** — Watch rings everywhere (home card, challenge card, and the scoring engine) come from Apple's consolidated `HKActivitySummary` via one shared helper, so Move/Exercise/Stand and the points match the Fitness app — and each other — exactly; individual sample queries are used only as a fallback before the day's summary has synced
 - **Profile photos** — avatar with crop/zoom, cached locally, synced to CloudKit

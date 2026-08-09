@@ -286,10 +286,13 @@ struct ThreeRingView: View {
     }
 }
 
-// MARK: - Three-Ring Stack (iPhone only)
+// MARK: - Two-Ring Stack (iPhone only)
 
-/// Concentric three-ring view for non-Apple Watch users.
-/// Order mirrors the scoring metrics: Steps (outer), Exercise (middle), Energy (inner).
+/// Concentric rings for non-Apple Watch users: Steps (outer), Energy (inner).
+///
+/// Two rings, not three — Apple Exercise Time is written by the Watch, so a third
+/// ring here would sit permanently empty. The two are weighted 1.5x in scoring so a
+/// full day still matches a Watch user's full day (see PointsCalculator).
 struct IPhoneRingView: View {
     let ringData: RingData
     let size: CGFloat
@@ -302,13 +305,9 @@ struct IPhoneRingView: View {
             ActivityRingView(progress: ringData.stepsPct,
                              color: .stepsColor, lineWidth: lw)
 
-            ActivityRingView(progress: ringData.exerciseRingPct,
-                             color: .exerciseRing, lineWidth: lw)
-                .padding(gap)
-
             ActivityRingView(progress: ringData.activeEnergyPct,
                              color: .activeEnergyColor, lineWidth: lw)
-                .padding(gap * 2)
+                .padding(gap)
         }
         .frame(width: size, height: size)
     }

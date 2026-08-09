@@ -197,21 +197,20 @@ actor SyncCoordinator {
                     standHours: m.standHours, standGoal: m.standGoal
                 )
             } else {
-                async let energyTask   = fetcher.activeEnergy(on: day)
-                async let exerciseTask = fetcher.exerciseMinutes(on: day)
-                let (energyOpt, exerciseOpt) = await (energyTask, exerciseTask)
+                // Exercise minutes aren't read here: Apple Exercise Time is written by
+                // the Watch, so it's structurally zero on an iPhone-only device.
+                let energyOpt = await fetcher.activeEnergy(on: day)
 
                 // A nil from a fetcher means HealthKit errored (not a genuine zero).
                 // For a *past* day being backfilled, if every metric failed to read,
                 // skip it rather than persisting a bogus 0 that would stick (past days
                 // with pts > 0 are never re-synced). Today always re-syncs and self-heals.
-                let allFailed = stepsOpt == nil && energyOpt == nil && exerciseOpt == nil
+                let allFailed = stepsOpt == nil && energyOpt == nil
                 if allFailed && !calendar.isDateInToday(day) { continue }
 
                 (points, ringData) = PointsCalculator.calculateNonWatch(
                     steps: steps, stepsGoal: goalResolver.stepsGoal,
-                    activeEnergy: energyOpt ?? 0, activeEnergyGoal: goalResolver.activeEnergyGoal,
-                    exerciseMinutes: exerciseOpt ?? 0
+                    activeEnergy: energyOpt ?? 0, activeEnergyGoal: goalResolver.activeEnergyGoal
                 )
             }
             ringData.totalSteps     = steps

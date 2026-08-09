@@ -38,6 +38,9 @@ struct Reaction: Identifiable, Codable, Hashable {
     static func makeID(fromParticipationID: String, toParticipationID: String,
                        date: Date = Date()) -> String {
         let formatter = DateFormatter()
+        // POSIX locale pins the Gregorian calendar so the day-keyed upsert ID is
+        // stable regardless of the device's region calendar (see DailyScore.makeID).
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = TimeZone.current
         return "\(fromParticipationID)_\(toParticipationID)_\(formatter.string(from: date))"

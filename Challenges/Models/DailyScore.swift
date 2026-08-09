@@ -14,6 +14,10 @@ struct DailyScore: Identifiable, Codable {
 
     static func makeID(participationID: String, date: Date) -> String {
         let formatter = DateFormatter()
+        // POSIX locale pins the Gregorian calendar: record IDs must not change with
+        // the device's region settings (e.g. Buddhist calendar renders 2569-08-08),
+        // or the upsert/dedupe keys shift and days get re-synced under new IDs.
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = TimeZone.current  // local timezone so ID matches the user's calendar day
         return "\(participationID)_\(formatter.string(from: date))"

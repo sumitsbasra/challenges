@@ -333,7 +333,8 @@ final class HomeViewModel {
         if hasWatch {
             points = PointsCalculator.calculateWatch(
                 moveCalories: activeEnergy, moveGoal: moveGoal,
-                exerciseMinutes: exerciseMinutes, standHours: standHours
+                exerciseMinutes: exerciseMinutes, exerciseGoal: exerciseGoal,
+                standHours: standHours, standGoal: standGoal
             ).points
         } else {
             points = PointsCalculator.calculateNonWatch(
